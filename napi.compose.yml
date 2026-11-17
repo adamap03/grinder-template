@@ -3,7 +3,15 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    env_file: .env.napi
+    env_file:
+      - path: .env.napi
+        required: false
+    environment:
+      DATA_DIR: /data # settings saved by the setup page
+    volumes:
+      - grinder-data:/data
     ports:
-      - "${NAPI_PORT}:3000"
+      - "${NAPI_PORT:-8080}:3000"
     restart: unless-stopped
+volumes:
+  grinder-data:

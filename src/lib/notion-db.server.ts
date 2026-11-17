@@ -130,6 +130,8 @@ function dbIds() {
   })().catch((e) => { ids = null; throw e; });
   return ids;
 }
+/** Finds or creates every table now (used right after first-run setup). */
+export const warmUp = () => dbIds().then(() => undefined);
 
 // ---------- Row encoding ----------
 function richText(s: string) {

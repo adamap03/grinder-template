@@ -55,6 +55,9 @@ export const Route = createFileRoute("/api/db")({
           }
         } catch (e) {
           console.error("api/db:", e);
+          // Notion refusing the integration is a setup problem, not a passing outage: say how to fix it.
+          if (/^Notion (401|403|404)\b/.test((e as Error).message))
+            return json({ data: null, error: { message: "Notion refused access. Check the integration secret is still valid and that the Grinder page is still shared with the integration (••• then Connections)." } }, 500);
           return json({ data: null, error: { message: "The database is unavailable right now. Please retry." } }, 500);
         }
       },

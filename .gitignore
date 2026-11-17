@@ -42,3 +42,6 @@ dist-ssr
 .env
 .env.*
 !.env.example
+
+# Settings saved by the setup page (bun run dev)
+data/

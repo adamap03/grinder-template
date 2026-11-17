@@ -21,20 +21,41 @@ Data lives in **your own Notion workspace** (one database per table, created on 
 
 ## Run it
 
-You need Docker (or [Bun](https://bun.sh) for development), a Notion account and a Claude API key.
+You need [Docker](https://www.docker.com/products/docker-desktop/), a Notion account and (for the AI features) a
+Claude API key.
 
-1. Copy `.env.example` to `.env.napi` and fill it in (Notion token and page id, Anthropic key, a random `AUTH_SECRET`).
-2. Start it:
+1. Download the code and start it:
 
    ```bash
-   NAPI_PORT=8080 docker compose -f napi.compose.yml up -d --build
+   git clone https://github.com/adamap03/grinder-template.git grinder
+   cd grinder
+   docker compose -f napi.compose.yml up -d --build
    ```
 
-   or for development: `bun install` then `bun run dev`.
-3. Open the app and **create an account. The first account becomes the admin** (admins can read sources and are not
-   limited by the daily allowances). Further accounts are ordinary users; promote one by setting its Role to `admin`
-   in the Notion *Users* table.
+2. Open http://localhost:8080. The **setup page** walks you through connecting Notion: create an internal
+   integration, share an empty page with it, paste the secret and the page link (and optionally your Claude key).
+   It asks for a **setup code** from the server log (Docker Desktop: the container's Logs, or
+   `docker compose -f napi.compose.yml logs app`), so only whoever runs the server can connect it.
+   The settings are saved in the app's Docker volume; Grinder then creates its tables in your page.
+3. **Create an account. The first account becomes the admin** (admins can read sources and are not limited by the
+   daily allowances). Further accounts are ordinary users; promote one by setting its Role to `admin` in the Notion
+   *Users* table.
 4. In Discover, open a sector's **Sources** and add a directory page, then press *Read … sources now*.
+
+Another port: `NAPI_PORT=9000 docker compose -f napi.compose.yml up -d --build`. Settings can also be given in a
+`.env.napi` file (see `.env.example`); those win over the setup page. For development: `bun install`, `bun run dev`.
+
+## Update
+
+Your copy is a git clone, so updating is pulling the latest code and rebuilding (your data stays in Notion and your
+settings in the Docker volume):
+
+```bash
+git pull --ff-only
+docker compose -f napi.compose.yml up -d --build
+```
+
+(or `npm run update`, which runs both).
 
 The Notion page fills with tables as you use the app. You can group them into section pages (Discover, Shortlist,
 Application tracker, …); the app finds tables one level down. Footer links (GitHub, YouTube, LinkedIn) are set in the
@@ -58,7 +79,9 @@ Notion *Site links* table.
   `noindex` and robots.txt asks crawlers to stay out, and the server refuses to fetch internal network addresses.
 - Reading directories is polite (about one request a second, an honest User-Agent). Do not use services that
   defeat a site's bot protection; if a site blocks the reader, ask the site or read it in a browser by hand.
-- Secrets live in `.env.napi`, which git ignores.
+- Secrets live in the app's Docker volume (saved by the setup page) or in `.env.napi`; git ignores both. The setup
+  page only works until Notion is connected and needs the setup code from the server log.
+- No analytics or third-party tracking.
 
 ## Credits
 

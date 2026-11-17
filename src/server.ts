@@ -3,6 +3,17 @@ import "./lib/error-capture";
 import { consumeLastCapturedError } from "./lib/error-capture";
 import { renderErrorPage } from "./lib/error-page";
 import { clientKey, hit } from "./lib/rate-limit";
+import { setupResponse } from "./lib/setup.server"; // loads saved settings into process.env first
+
+// Optional visitor-tracker script added to every page (e.g. a dashboard's t.js), only when VISITOR_TRACKER_URL is set.
+async function withTracker(response: Response): Promise<Response> {
+  const src = process.env["VISITOR_TRACKER_URL"];
+  if (!src || !/^https?:\/\/[^"<>\s]+$/.test(src) || !(response.headers.get("content-type") ?? "").includes("text/html")) return response;
+  const html = await response.text();
+  const headers = new Headers(response.headers);
+  headers.delete("content-length");
+  return new Response(html.replace("</body>", `<script src="${src}" async></script></body>`), { status: response.status, statusText: response.statusText, headers });
+}
 
 // About 10 requests a second per client sustained over a minute is far above normal use and stops bulk copying.
 const REQUESTS_PER_MINUTE = 600;
@@ -71,9 +82,11 @@ export default {
       return withHeaders(new Response("Too many requests. Please wait a minute.", { status: 429, headers: { "retry-after": "60", "content-type": "text/plain" } }));
     }
     try {
+      const setup = await setupResponse(request);
+      if (setup) return withHeaders(setup);
       const handler = await getServerEntry();
       const response = await handler.fetch(request, env, ctx);
-      return withHeaders(await normalizeCatastrophicSsrResponse(response));
+      return withHeaders(await withTracker(await normalizeCatastrophicSsrResponse(response)));
     } catch (error) {
       console.error(error);
       return new Response(renderErrorPage(), {

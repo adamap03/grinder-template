@@ -1,16 +1,18 @@
 import { createFileRoute, Link } from '@tanstack/react-router';
 import { useEffect, useState } from 'react';
 import { useServerFn } from '@tanstack/react-start';
-import type { z } from 'zod';
+import { z } from 'zod';
 import { Loader2, RefreshCw } from 'lucide-react';
 import { Shell } from '@/components/Shell';
 import { Button } from '@/components/Button';
 import { LanguagesEditor } from '@/components/LanguagesEditor';
+import { Manifests } from '@/components/Manifests';
 import { supabase } from '@/integrations/supabase/client';
 import { generateProfile, profileHistory, type Assessment } from '@/lib/profile.functions';
 import { pageHead } from '@/lib/seo';
 
 export const Route = createFileRoute('/profile')({
+  validateSearch: (s) => z.object({ tab: z.enum(['assessment', 'manifests']).optional() }).parse(s),
   head: () => pageHead({ title: 'My profile — Grinder', description: 'An honest outside view of you as a candidate, built up over time.', path: '/profile' }),
   component: ProfilePage,
 });
@@ -18,7 +20,10 @@ export const Route = createFileRoute('/profile')({
 type A = z.infer<typeof Assessment>;
 const parse = (s: unknown): A | null => { try { return s ? (JSON.parse(String(s)) as A) : null; } catch { return null; } };
 
+const TABS = [['assessment', 'Assessment'], ['manifests', 'Manifests']] as const;
+
 function ProfilePage() {
+  const { tab = 'assessment' } = Route.useSearch();
   const gen = useServerFn(generateProfile);
   const hist = useServerFn(profileHistory);
   const [signedIn, setSignedIn] = useState<boolean | null>(null);
@@ -52,9 +57,14 @@ function ProfilePage() {
     <Shell>
       <div className="py-8">
         <h1 className="font-display text-5xl">My profile</h1>
-        <p className="mt-2 max-w-2xl text-muted-foreground">An outside view of you as a candidate, written from your resumes, cover letters, quiz answers and applications. Each new version reads the earlier ones, so it builds a longer-term opinion over time.</p>
+        <nav aria-label="Profile sections" className="mt-4 flex flex-wrap gap-2">
+          {TABS.map(([k, label]) => (
+            <Link key={k} to="/profile" search={{ tab: k }} className={`rounded-full px-4 py-1.5 text-sm ${tab === k ? 'bg-primary text-primary-foreground' : 'glass hover:bg-glass-strong'}`}>{label}</Link>
+          ))}
+        </nav>
+        {tab === 'assessment' && <p className="mt-4 max-w-2xl text-muted-foreground">An outside view of you as a candidate, written from your resumes, cover letters, quiz answers and applications. Each new version reads the earlier ones, so it builds a longer-term opinion over time.</p>}
       </div>
-      {signedIn === false ? <Link to="/resume" className="underline">Sign in to see your profile</Link> : (
+      {signedIn === false ? <Link to="/resume" className="underline">Sign in to see your profile</Link> : tab === 'manifests' ? (signedIn && <Manifests />) : (
         <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
           <div className="space-y-4">
             <div className="flex flex-wrap items-center gap-3">

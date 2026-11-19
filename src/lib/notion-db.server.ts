@@ -55,6 +55,8 @@ const TABLES: Record<string, Spec> = {
   interview_questions: { title: 'Interview questions', cols: { question: 't', id: 't', user_id: 't', answer: 't', guidance: 't', created_at: 't', updated_at: 't' }, key: ['id'], owner: true, defaults: { answer: '', guidance: '' } },
   contacts: { title: 'Contacts', cols: { text: 't', id: 't', user_id: 't', link: 'u', created_at: 't' }, key: ['id'], owner: true },
   recruiters: { title: 'Recruiters', cols: { name: 't', id: 't', user_id: 't', agency: 't', email: 't', phone: 't', location_range: 't', opportunities: 't', notes: 't', last_contact: 'd', created_at: 't' }, key: ['id'], owner: true, defaults: { agency: '', email: '', phone: '', location_range: '', opportunities: '', notes: '' } },
+  // My profile > Manifests: career plan and goals written now and then; only the latest can be edited (see execute).
+  manifests: { title: 'Manifests', cols: { title: 't', id: 't', user_id: 't', now: 't', one_year: 't', five_years: 't', plan: 't', non_negotiables: 't', created_at: 't', updated_at: 't' }, key: ['id'], owner: true, defaults: { now: '', one_year: '', five_years: '', plan: '', non_negotiables: '' } },
   profiles: { title: 'Profiles', cols: { user_id: 't', languages: 'j', assessment: 't', discover: 'j', updated_at: 't' }, key: ['user_id'], owner: true, defaults: { languages: [], assessment: '' } },
   profile_history: { title: 'Profile history', cols: { label: 't', id: 't', user_id: 't', assessment: 't', created_at: 't' }, key: ['id'], owner: true },
 };
@@ -334,6 +336,7 @@ export async function execute(q: Query, scope: Scope): Promise<DbResult> {
         out.push(await createRow(q.table, v));
       }
     } else if (q.action === 'upsert') {
+      if (q.table === 'manifests') return fail('Use insert or update for manifests', '42501');
       const keys = q.onConflict ? q.onConflict.split(',').map((k) => k.trim()) : spec.key;
       for (const v of values) {
         const hit = all.find((r) => keys.every((k) => same(r[k], v[k])) && (scope.admin || !spec.owner || r['user_id'] === v['user_id']));
@@ -343,6 +346,11 @@ export async function execute(q: Query, scope: Scope): Promise<DbResult> {
     } else if (q.action === 'update') {
       const patch = { ...(values[0] || {}) };
       if (!scope.admin) delete patch['user_id'];
+      if (q.table === 'manifests') {
+        // Earlier manifests are a record of what you thought then: only each person's latest one can change.
+        const latest = (uid: unknown) => all.filter((x) => x['user_id'] === uid).reduce<Row | null>((m, x) => (!m || String(x['created_at']) > String(m['created_at']) ? x : m), null);
+        if (matched().some((r) => latest(r['user_id']) !== r)) return fail('Earlier manifests are locked. Start a new one instead.', '42501');
+      }
       for (const r of matched()) { await updateRow(q.table, r, patch); out.push(r); }
     } else if (q.action === 'delete') {
       for (const r of matched()) { await deleteRow(q.table, r); out.push(r); }

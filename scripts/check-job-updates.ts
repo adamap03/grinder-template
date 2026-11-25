@@ -6,8 +6,10 @@ import { isBaseline, mergePostings } from '../src/lib/job-updates.server.ts';
 const p = (title: string, url = '') => ({ title, location: 'Edinburgh', url, closing_date: '', summary: '' });
 const NOW = '2026-11-25T10:00:00.000Z';
 
-// A firm's first successful read only sets the baseline: nothing is new.
-assert.deepEqual(mergePostings(null, [p('Trainee')], true, NOW).map((v) => v.first_seen), ['']);
+// A firm's first successful read sets the baseline: its postings are dated now and marked baseline (shown that week).
+assert.deepEqual(mergePostings(null, [p('Trainee')], true, NOW).map((v) => [v.first_seen, v.baseline]), [[NOW, true]]);
+// The next read keeps them as they were (still baseline, same date), so they drop off the card after the week.
+assert.deepEqual(mergePostings(mergePostings(null, [p('Trainee')], true, NOW), [p('Trainee')], false, '2026-12-02T10:00:00.000Z').map((v) => [v.first_seen, v.baseline]), [[NOW, true]]);
 // Later reads: a posting not seen before is new; known ones keep their first_seen (matched by link, then title).
 const before = [{ ...p('Site engineer', 'https://jobs.example/1?ref=x'), first_seen: '' }, { ...p('Planner'), first_seen: '2026-11-20T00:00:00.000Z' }];
 const after = mergePostings(before, [p('Site engineer', 'https://jobs.example/1/'), p('Planner'), p('Digital documentation trainee', 'https://jobs.example/9')], false, NOW);

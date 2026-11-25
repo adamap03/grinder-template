@@ -17,9 +17,9 @@ export const Route = createFileRoute('/shortlist')({
   component: ShortlistPage,
 });
 
-type Vacancy = { title: string; location: string; url: string; closing_date: string; summary: string; first_seen?: string };
+type Vacancy = { title: string; location: string; url: string; closing_date: string; summary: string; first_seen?: string; baseline?: boolean };
 // A posting first seen on the job board in the last week (set by the weekly check, see src/lib/job-updates.server.ts).
-const isNew = (v: Vacancy) => !!v.first_seen && Date.now() - Date.parse(v.first_seen) < 7 * 24 * 3600_000;
+const isNew = (v: Vacancy) => !v.baseline && !!v.first_seen && Date.now() - Date.parse(v.first_seen) < 7 * 24 * 3600_000;
 type Firm = {
   id: string; name: string; company_number: string; town: string; website: string | null; careers_url: string | null; summary: string; sic: string; size: string; notes: string; tags: string;
   vacancies: Vacancy[] | null; vacancy_note: string; checked_at: string | null; embeddable: string;
@@ -163,12 +163,14 @@ function Updates({ onOpen, onChecked }: { onOpen: (firmId: string) => void; onCh
     await load();
   }
   const day = (iso: string) => new Date(iso).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
+  const added = (u?.postings ?? []).filter((p) => !p.baseline).length;
+  const based = (u?.postings ?? []).length - added;
   const byFirm = [...new Map((u?.postings ?? []).map((p) => [p.firm_id, { firm: p.firm, firm_id: p.firm_id, list: (u?.postings ?? []).filter((x) => x.firm_id === p.firm_id) }])).values()];
   return (
     <section aria-label="Updates" className="mx-auto mt-8 max-w-4xl rounded-lg glass p-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2><Button aria-expanded={open} onClick={toggle} className="flex items-center gap-2 font-semibold"><ChevronDown className={`h-4 w-4 transition ${open ? '' : '-rotate-90'}`} />Updates{!!u?.postings.length && <span className="rounded-full bg-primary px-2 py-0.5 text-xs text-primary-foreground">{u.postings.length} new</span>}</Button></h2>
+          <h2><Button aria-expanded={open} onClick={toggle} className="flex items-center gap-2 font-semibold"><ChevronDown className={`h-4 w-4 transition ${open ? '' : '-rotate-90'}`} />Updates{!!added && <span className="rounded-full bg-primary px-2 py-0.5 text-xs text-primary-foreground">{added} new</span>}{!!based && <span className="rounded-full border px-2 py-0.5 text-xs font-normal">{based} current</span>}</Button></h2>
           {open && <p className="text-xs text-muted-foreground">
             {u?.status.running ? `Reading job boards… ${u.status.done} of ${u.status.total}`
               : u?.checked_at ? `Job boards read ${day(u.checked_at)}; next check ${u.next_at ? day(u.next_at) : 'soon'}. New postings from the last 7 days.`
@@ -182,6 +184,7 @@ function Updates({ onOpen, onChecked }: { onOpen: (firmId: string) => void; onCh
       {error && <p role="alert" className="mt-2 text-xs text-destructive">{error}</p>}
       {open && <>
       {u && !u.status.running && u.checked_at && !u.postings.length && <p className="mt-3 text-sm text-muted-foreground">No new postings on your shortlisted firms' job boards this week.</p>}
+      {based > 0 && <p className="mt-3 text-xs text-muted-foreground">First check: <b>Current</b> postings are everything open now, your baseline. They show for this week; from the next check only <b>New</b> additions are listed.</p>}
       {byFirm.length > 0 && (
         <ul className="mt-3 space-y-3">
           {byFirm.map((g) => (
@@ -190,7 +193,7 @@ function Updates({ onOpen, onChecked }: { onOpen: (firmId: string) => void; onCh
               <ul className="mt-1 space-y-1">
                 {g.list.map((p, i) => (
                   <li key={i} className="flex flex-wrap items-baseline gap-x-2 text-sm">
-                    <span className="rounded-full bg-primary px-2 py-0.5 text-[10px] font-semibold uppercase text-primary-foreground">New</span>
+                    {p.baseline ? <span className="rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase">Current</span> : <span className="rounded-full bg-primary px-2 py-0.5 text-[10px] font-semibold uppercase text-primary-foreground">New</span>}
                     {/^https?:/.test(p.url) ? <a href={p.url} target="_blank" rel="noreferrer" className="font-medium underline">{p.title}</a> : <span className="font-medium">{p.title}</span>}
                     <span className="text-xs text-muted-foreground">{[p.location, p.closing_date && `closes ${p.closing_date}`, p.first_seen && `seen ${day(p.first_seen)}`].filter(Boolean).join(' · ')}</span>
                   </li>

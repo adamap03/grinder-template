@@ -1,12 +1,12 @@
 // Shortlist "Updates": every shortlisted firm's job board is read once a week (and on "Check now"); postings not seen
-// before are marked with first_seen, so the Updates card can highlight new ones. A firm's very first read only sets
-// the baseline (nothing in it counts as new), and so does a list read before Updates existed (no first_seen at all),
-// so the card shows only changes, never a backlog. Server-only.
+// before are marked with first_seen, so the Updates card can highlight new ones. A firm's very first read sets the
+// baseline (and so does a list read before Updates existed, with no first_seen at all): those postings are marked
+// baseline and shown on the card for that first week as current openings; after that only additions show. Server-only.
 //
 // ponytail: an hourly timer in this server process starts the weekly runs; one server is assumed (like the rate limiter).
 
 const WEEK = 7 * 24 * 3600_000;
-export type Posting = { title: string; location: string; url: string; closing_date: string; summary: string; first_seen?: string };
+export type Posting = { title: string; location: string; url: string; closing_date: string; summary: string; first_seen?: string; baseline?: boolean };
 type Status = { running: boolean; done: number; total: number; started_at: string | null };
 const runs = new Map<string, Status>(); // per user
 
@@ -16,11 +16,15 @@ const keyOf = (v: Posting) => (v.url && /^https?:/.test(v.url) ? v.url.replace(/
  *  saved before Updates existed (postings without first_seen). */
 export const isBaseline = (vacancyCount: unknown, before: Posting[] | null) => vacancyCount == null || (!!before?.length && !before.some((v) => 'first_seen' in v));
 
-/** A fresh read merged with the previous list: postings seen before keep their first_seen; new ones get now, except
- *  on a baseline read (see isBaseline). */
-export function mergePostings(before: Posting[] | null, read: Omit<Posting, 'first_seen'>[], firstRead: boolean, now = new Date().toISOString()): Posting[] {
-  const seen = new Map((before ?? []).map((v) => [keyOf(v), v.first_seen ?? '']));
-  return read.map((v) => ({ ...v, first_seen: seen.get(keyOf(v)) ?? (firstRead ? '' : now) }));
+/** A fresh read merged with the previous list: postings seen before keep their first_seen (and baseline mark); the
+ *  rest get now, marked baseline on a baseline read (see isBaseline), else new. */
+export function mergePostings(before: Posting[] | null, read: Omit<Posting, 'first_seen' | 'baseline'>[], firstRead: boolean, now = new Date().toISOString()): Posting[] {
+  const seen = new Map((before ?? []).map((v) => [keyOf(v), v]));
+  return read.map((v) => {
+    const old = seen.get(keyOf(v));
+    if (old) return { ...v, first_seen: old.first_seen ?? '', ...(old.baseline ? { baseline: true } : {}) };
+    return { ...v, first_seen: now, ...(firstRead ? { baseline: true } : {}) };
+  });
 }
 
 export const runStatus = (uid: string): Status => runs.get(uid) ?? { running: false, done: 0, total: 0, started_at: null };

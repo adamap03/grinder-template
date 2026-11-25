@@ -45,6 +45,9 @@ export function CoverLetterCreator({ letterId }: { letterId?: string | undefined
   const fileOf = useServerFn(pastLetterFile);
   // An uploaded past letter shown in the left panel (Open): PDFs in a viewer, other files as their text.
   const [viewing, setViewing] = useState<{ id: string; name: string; url: string | null; text: string; pdf: boolean } | null>(null);
+  const [shownId, setShownId] = useState(''); // which letter made here is shown on the left ('' = the latest)
+  // A dot in Past cover letters: an uploaded file shows as the file, a letter made here as its preview.
+  const select = (d: { id: string; name: string; created: boolean }) => { if (d.created) { setViewing(null); setShownId(d.id); } else void showPast(d); };
   async function showPast(d: { id: string; name: string }) {
     const pdf = /.pdf$/i.test(d.name) || !/.(docx?|odt|txt)$/i.test(d.name);
     setViewing({ id: d.id, name: d.name, url: null, text: '', pdf });
@@ -146,7 +149,8 @@ export function CoverLetterCreator({ letterId }: { letterId?: string | undefined
         <div className="grid gap-3 sm:grid-cols-3">
           {LETTER_TYPES.map((t) => (
             <Button key={t.id} role="radio" aria-checked={form.type === t.id} onClick={() => setForm((f) => ({ ...f, type: t.id }))}
-              className={`rounded-lg glass p-4 text-left ${form.type === t.id ? 'ring-2 ring-ring' : 'opacity-80 hover:opacity-100'}`}>
+              className={`relative rounded-lg glass p-4 pr-9 text-left transition ${form.type === t.id ? 'bg-primary/10 outline-2 -outline-offset-1 outline-primary' : 'opacity-75 hover:opacity-100'}`}>
+              {form.type === t.id && <Check aria-hidden className="absolute right-3 top-3 h-4 w-4 text-primary" />}
               <span className="block font-medium">{t.name}</span><span className="text-sm text-muted-foreground">{t.blurb}</span>
             </Button>
           ))}
@@ -163,7 +167,8 @@ export function CoverLetterCreator({ letterId }: { letterId?: string | undefined
 
   // Like the Resume page: upload row, the current letter as it prints on the left, past letters to pick from on the right.
   if (!letter) {
-    const [latest, ...others] = mine ?? [];
+    const latest = (mine ?? []).find((m) => m.id === shownId) ?? mine?.[0];
+    const others = (mine ?? []).filter((m) => m !== latest);
     return (
       <>
         <div onDragOver={(e) => { e.preventDefault(); setDragging(true); }} onDragLeave={() => setDragging(false)} onDrop={(e) => { e.preventDefault(); setDragging(false); const f = e.dataTransfer.files[0]; if (f && !busy) void upload(f); }} className={`resume-upload my-5 flex flex-wrap items-center gap-4 rounded-lg border-2 border-dashed glass px-5 py-4 ${dragging ? 'ring-2 ring-ring' : ''}`}>
@@ -205,13 +210,13 @@ export function CoverLetterCreator({ letterId }: { letterId?: string | undefined
                   <Button onClick={() => openMade(latest.id)} className={primary}><FileText className="h-4 w-4" />Edit</Button>
                 </div>
                 <div className="h-[78vh] overflow-hidden rounded-lg border bg-glass-strong"><LetterPreview letter={latest.letter} fit onClick={() => openMade(latest.id)} /></div>
-                {others.length > 0 && <div><p className="mb-2 text-xs font-semibold uppercase text-muted-foreground">Other cover letters</p><div className="grid gap-2 sm:grid-cols-2">{others.map((m) => <Button key={m.id} onClick={() => openMade(m.id)} className="flex items-center gap-3 rounded-lg glass p-3 text-left"><FileText className="h-6 w-6 shrink-0 text-muted-foreground" /><div className="min-w-0"><div className="truncate text-sm font-medium">{m.name}</div><div className="text-xs text-muted-foreground">Edited {new Date(m.at).toLocaleDateString()}</div></div></Button>)}</div></div>}
+                {others.length > 0 && <div><p className="mb-2 text-xs font-semibold uppercase text-muted-foreground">Other cover letters</p><div className="grid gap-2 sm:grid-cols-2">{others.map((m) => <Button key={m.id} onClick={() => setShownId(m.id)} className="flex items-center gap-3 rounded-lg glass p-3 text-left"><FileText className="h-6 w-6 shrink-0 text-muted-foreground" /><div className="min-w-0"><div className="truncate text-sm font-medium">{m.name}</div><div className="text-xs text-muted-foreground">Edited {new Date(m.at).toLocaleDateString()}</div></div></Button>)}</div></div>}
               </div>
             )}
           </div>
           <div className="min-w-0 lg:pt-5">
-            <DocumentHistory key={historyKey} kind="Cover letter" title="Past cover letters" className="mt-0" onUse={(d) => void pickPast(d.id)} onOpen={(d) => void showPast(d)}
-              intro="Your uploaded and created cover letters, newest first. Open shows an uploaded one on the left; Use opens an editable copy of it (the file stays as it is)." />
+            <DocumentHistory key={historyKey} kind="Cover letter" title="Past cover letters" className="mt-0" onUse={(d) => void pickPast(d.id)} onOpen={(d) => void showPast(d)} onSelect={select} selectedId={viewing?.id ?? latest?.id}
+              intro="Your uploaded and created cover letters, newest first. Click a dot to show that letter on the left. Use opens an editable copy of an uploaded one (the file stays as it is)." />
           </div>
         </div>
       </>

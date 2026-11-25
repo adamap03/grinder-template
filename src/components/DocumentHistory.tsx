@@ -17,8 +17,9 @@ const toBase64 = (buf: ArrayBuffer) => {
 
 /** Uploaded old CVs or cover letters, newest first, so changes over time are easy to follow. */
 /** onUse: adds a "Use" button to uploaded files (the cover letter creator opens an editable copy).
- *  onOpen: Open shows an uploaded file there (the creator's left panel) instead of in a new tab. */
-export function DocumentHistory({ kind, title, intro, className = 'mt-8', onUse, onOpen }: { kind: 'CV' | 'Cover letter'; title: string; intro: string; className?: string; onUse?: (d: Doc) => void; onOpen?: (d: Doc) => void }) {
+ *  onOpen: Open shows an uploaded file there (the creator's left panel) instead of in a new tab.
+ *  onSelect: the timeline dots become buttons that pick which document is shown there; selectedId is filled in. */
+export function DocumentHistory({ kind, title, intro, className = 'mt-8', onUse, onOpen, onSelect, selectedId }: { kind: 'CV' | 'Cover letter'; title: string; intro: string; className?: string; onUse?: (d: Doc) => void; onOpen?: (d: Doc) => void; onSelect?: (d: Doc) => void; selectedId?: string | undefined }) {
   const list = useServerFn(listDocuments);
   const upload = useServerFn(uploadDocumentFn);
   const remove = useServerFn(removeDocument);
@@ -97,7 +98,10 @@ export function DocumentHistory({ kind, title, intro, className = 'mt-8', onUse,
         <ol className="mt-4 space-y-2 border-l pl-4">
           {docs.map((d) => (
             <li key={d.id} className="relative">
-              <span aria-hidden className="absolute -left-[21px] top-2 h-2.5 w-2.5 rounded-full bg-primary" />
+              {onSelect
+                ? <Button aria-label={`Show ${d.name} on the left`} aria-pressed={selectedId === d.id} title="Show on the left" onClick={() => onSelect(d)}
+                    className={`absolute -left-[24px] top-1 grid h-4 w-4 place-items-center rounded-full border-2 border-primary ${selectedId === d.id ? 'bg-primary' : 'bg-background hover:bg-primary/40'}`} />
+                : <span aria-hidden className="absolute -left-[21px] top-2 h-2.5 w-2.5 rounded-full bg-primary" />}
               <div className="flex flex-wrap items-center gap-2 text-sm">
                 <input type="month" aria-label={`Month of ${d.name}`} defaultValue={d.date?.slice(0, 7) ?? ''} onBlur={(e) => void change(d, { date: e.target.value ? `${e.target.value}-01` : null })} className="w-36 shrink-0 rounded border border-transparent bg-transparent px-1 text-xs text-muted-foreground hover:border-border focus:border-border" />
                 <input aria-label={`Name of ${d.name}`} defaultValue={d.name} onBlur={(e) => void change(d, { name: e.target.value })} onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }} className="min-w-0 flex-1 rounded border border-transparent bg-transparent px-1 font-medium hover:border-border focus:border-border" />

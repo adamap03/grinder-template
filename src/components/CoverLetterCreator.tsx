@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { useServerFn } from '@tanstack/react-start';
 import { useNavigate } from '@tanstack/react-router';
-import { ArrowDown, ArrowLeft, ArrowUp, Check, Download, FileText, Loader2, Minus, Plus, Sparkles, Trash2 } from 'lucide-react';
+import { ArrowDown, ArrowLeft, ArrowUp, Check, Download, FileText, Loader2, Minus, Plus, Sparkles, Trash2, Upload } from 'lucide-react';
+import { DocumentHistory } from '@/components/DocumentHistory';
+import { uploadDocumentFn } from '@/lib/documents.functions';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/Button';
-import { draftCoverLetter } from '@/lib/cover-letter.functions';
+import { draftCoverLetter, pastLetterParts } from '@/lib/cover-letter.functions';
 import { ACCENT_RGB, LETTER_TYPES, blankLetter, letterDOCX, letterPDF, letterText, readLetter, todayLong, type Letter, type LetterType } from '@/lib/cover-letter-model';
 
 // Preparation > Create new cover letter: pick a letter type, give the firm, role and advert, and Claude drafts a letter
@@ -19,6 +21,8 @@ async function senderFromCV(): Promise<Letter['sender']> {
   const p = ((r.data?.['data'] as { personal?: Record<string, string> } | null)?.personal) ?? {};
   return { name: p['name'] ?? '', contact: [p['email'], p['phone'], p['location'], p['linkedin']].filter(Boolean).join(' · ') };
 }
+type Made = { id: string; name: string; at: string; letter: Letter };
+const toBase64 = (buf: ArrayBuffer) => { let s = ''; const bytes = new Uint8Array(buf); for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode(...bytes.subarray(i, i + 0x8000)); return btoa(s); };
 const nameOf = (l: Letter) => `Cover letter – ${[l.company, l.role].filter(Boolean).join(' – ') || 'draft'}`;
 
 export function CoverLetterCreator({ letterId }: { letterId?: string | undefined }) {
@@ -32,6 +36,50 @@ export function CoverLetterCreator({ letterId }: { letterId?: string | undefined
   const [error, setError] = useState('');
   const [saved, setSaved] = useState('');
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const parts = useServerFn(pastLetterParts);
+  const uploadFile = useServerFn(uploadDocumentFn);
+  const [view, setView] = useState<'list' | 'draft'>('list');
+  const [mine, setMine] = useState<Made[] | null>(null);
+  const [dragging, setDragging] = useState(false);
+  const [historyKey, setHistoryKey] = useState(0);
+
+  // Letters made in the app (they have data), most recently edited first.
+  async function loadMine() {
+    const r = await supabase.from('cover_letters').select('id,name,data,updated_at,created_at');
+    setMine((r.data ?? []).flatMap((d) => { const l = readLetter(d['data']); return l ? [{ id: String(d['id']), name: String(d['name']), at: String(d['updated_at'] || d['created_at'] || ''), letter: l }] : []; })
+      .sort((x, y) => y.at.localeCompare(x.at)));
+  }
+  useEffect(() => { if (signedIn && !letter) void loadMine(); }, [signedIn, letter]);
+  const openMade = (id: string) => void navigate({ to: '/preparation', search: { tab: 'create', letter: id } });
+
+  // A past letter as a starting point: one made here opens as it is; an uploaded file is split into editable parts
+  // (word for word) and opened as a new letter, leaving the file untouched.
+  async function pickPast(id: string) {
+    setError(''); setBusy('Reading the letter and splitting it into editable parts…');
+    try {
+      const r = await parts({ data: { id } });
+      if (!r.ok) throw new Error(r.error);
+      if (r.letter) { openMade(id); return; }
+      const x = r.parts!;
+      const cv = await senderFromCV();
+      await create({ ...blankLetter('graduate', { name: x.sender_name || cv.name, contact: x.sender_contact || cv.contact }),
+        company: x.company, role: x.role, date: x.date || todayLong(), recipient: x.recipient || 'Hiring Manager', salutation: x.salutation || 'Dear Hiring Manager,',
+        paragraphs: x.paragraphs.length ? x.paragraphs : [''], signOff: x.sign_off || 'Yours sincerely,', inspiredBy: [r.from] });
+    } catch (e) { setError((e as Error).message); } finally { setBusy(''); }
+  }
+  async function upload(file: File) {
+    setError('');
+    if (file.size > 5 * 1024 * 1024) { setError('The file is larger than 5 MB.'); return; }
+    setBusy('Uploading…');
+    const r = await uploadFile({ data: { kind: 'Cover letter', name: file.name, type: file.type || 'application/octet-stream', data: toBase64(await file.arrayBuffer()), date: null } }).catch((e: Error) => ({ ok: false as const, error: e.message }));
+    setHistoryKey((k) => k + 1);
+    if (!r.ok || !r.id) { setBusy(''); setError(r.ok ? 'Uploaded, but it could not be opened. Choose it under Past cover letters.' : r.error); return; }
+    await pickPast(r.id);
+  }
+  async function scratch() {
+    setBusy('Starting…');
+    try { await create(blankLetter('graduate', await senderFromCV())); } catch (e) { setError((e as Error).message); } finally { setBusy(''); }
+  }
 
   useEffect(() => { supabase.auth.getSession().then(({ data }) => setSignedIn(!!data.session)); }, []);
   // Opening a saved letter (from Past cover letters).
@@ -46,7 +94,7 @@ export function CoverLetterCreator({ letterId }: { letterId?: string | undefined
 
   async function create(l: Letter) {
     const { data, error: e } = await supabase.from('cover_letters')
-      .insert({ name: nameOf(l), date: new Date().toISOString().slice(0, 10), data: l, text: letterText(l) }).select('id').single();
+      .insert({ name: nameOf(l), date: new Date().toISOString().slice(0, 10), data: l, text: letterText(l), updated_at: new Date().toISOString() }).select('id').single();
     if (e || !data) throw new Error(e?.message ?? 'The letter could not be saved.');
     setRowId(String(data['id'])); setLetter(l); setSaved('Saved');
     void navigate({ to: '/preparation', search: { tab: 'create', letter: String(data['id']) }, replace: true });
@@ -54,6 +102,7 @@ export function CoverLetterCreator({ letterId }: { letterId?: string | undefined
   async function start(withClaude: boolean) {
     setError('');
     if (!form.company.trim()) { setError('Enter the firm first.'); return; }
+    if (!withClaude) return;
     setBusy(withClaude ? 'Claude is reading the advert, your CV and your past letters (about a minute)…' : 'Starting…');
     try {
       const l = { ...blankLetter(form.type, await senderFromCV()), company: form.company.trim(), role: form.role.trim() };
@@ -71,16 +120,17 @@ export function CoverLetterCreator({ letterId }: { letterId?: string | undefined
     clearTimeout(timer.current);
     timer.current = setTimeout(async () => {
       setSaved('Saving…');
-      const { error: e } = await supabase.from('cover_letters').update({ name: nameOf(next), data: next, text: letterText(next) }).eq('id', rowId);
+      const { error: e } = await supabase.from('cover_letters').update({ name: nameOf(next), data: next, text: letterText(next), updated_at: new Date().toISOString() }).eq('id', rowId);
       setSaved(e ? 'Save failed — edit again to retry' : 'Saved');
     }, 800);
   }
 
   if (signedIn === false) return <p className="text-sm text-muted-foreground">Sign in (on the Resume page) to create cover letters.</p>;
 
-  if (!letter) return (
+  if (!letter && view === 'draft') return (
     <div className="max-w-3xl space-y-5">
-      <p className="text-muted-foreground">Choose the kind of letter, tell Claude the firm and the role, and paste the advert or its link. Claude drafts it from your latest CV and your past cover letters for similar roles; you then edit it beside a live preview. It is saved in Past cover letters.</p>
+      <Button onClick={() => setView('list')} className="flex items-center gap-1 text-sm text-muted-foreground"><ArrowLeft className="h-4 w-4" />Back to your cover letters</Button>
+      <p className="text-muted-foreground">Choose the kind of letter, tell Claude the firm and the role, and paste the advert or its link. Claude drafts it from your latest CV and your past cover letters for similar roles; you then edit it beside a live preview.</p>
       <fieldset className="grid gap-3 sm:grid-cols-2">
         <legend className="mb-2 text-sm font-semibold">Type of letter</legend>
         {LETTER_TYPES.map((t) => (
@@ -97,13 +147,51 @@ export function CoverLetterCreator({ letterId }: { letterId?: string | undefined
       <label className="block space-y-1 text-xs font-medium text-muted-foreground">Link to the advert (optional)<input type="url" maxLength={2000} placeholder="https://…" value={form.jobUrl} onChange={(e) => setForm({ ...form, jobUrl: e.target.value })} className={input} /></label>
       <label className="block space-y-1 text-xs font-medium text-muted-foreground">Or paste the advert (optional)<textarea rows={6} maxLength={20000} value={form.job} onChange={(e) => setForm({ ...form, job: e.target.value })} className={input} /></label>
       {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-      <div className="flex flex-wrap items-center gap-3">
-        <Button disabled={!!busy} onClick={() => void start(true)} className={primary}>{busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}Draft with Claude</Button>
-        <Button disabled={!!busy} onClick={() => void start(false)} className={secondary}><FileText className="h-4 w-4" />Start blank</Button>
-      </div>
+      <Button disabled={!!busy} onClick={() => void start(true)} className={primary}>{busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}Draft with Claude</Button>
       {busy && <p role="status" className="text-sm text-muted-foreground">{busy}</p>}
     </div>
   );
+
+  // Like the Resume page: upload row, the current letter as it prints on the left, past letters to pick from on the right.
+  if (!letter) {
+    const [latest, ...others] = mine ?? [];
+    return (
+      <>
+        <div onDragOver={(e) => { e.preventDefault(); setDragging(true); }} onDragLeave={() => setDragging(false)} onDrop={(e) => { e.preventDefault(); setDragging(false); const f = e.dataTransfer.files[0]; if (f && !busy) void upload(f); }} className={`resume-upload my-5 flex flex-wrap items-center gap-4 rounded-lg border-2 border-dashed glass px-5 py-4 ${dragging ? 'ring-2 ring-ring' : ''}`}>
+          <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-sage/35"><Upload className="h-5 w-5" /></div>
+          <div className="min-w-0 flex-1"><h2 className="text-lg font-semibold">Start with a cover letter</h2><p className="text-sm text-muted-foreground">Drop your PDF or DOCX here · up to 5 MB. It is kept in Past cover letters and opened as an editable letter.</p></div>
+          <label className={`${primary} cursor-pointer ${busy ? 'pointer-events-none opacity-50' : ''}`}>{busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}Upload cover letter<input type="file" accept=".pdf,.doc,.docx,.odt,.txt" className="sr-only" disabled={!!busy} onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) void upload(f); }} /></label>
+        </div>
+        {busy && <p role="status" className="mb-3 flex items-center gap-2 text-sm"><Loader2 className="h-4 w-4 animate-spin" />{busy}</p>}
+        {error && <p role="alert" className="mb-3 text-sm text-destructive">{error}</p>}
+        <div className="grid items-start gap-6 lg:grid-cols-2">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b py-5">
+              <h2 className="text-lg font-semibold">Your current cover letter</h2>
+              <div className="flex gap-3">
+                <Button disabled={!!busy} className="flex items-center gap-2 text-sm" onClick={() => void scratch()}>+ Create from scratch</Button>
+                <Button disabled={!!busy} className="flex items-center gap-1 text-sm" onClick={() => { setError(''); setView('draft'); }}><Sparkles className="h-4 w-4 text-amber-500" />Draft with Claude</Button>
+              </div>
+            </div>
+            {mine === null ? <p className="py-8 text-sm text-muted-foreground">Loading cover letters…</p> : !latest ? <p className="py-8 text-sm text-muted-foreground">No cover letters made here yet. Upload one, pick one from Past cover letters, or create one.</p> : (
+              <div className="space-y-3 py-5">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0"><p className="truncate font-medium">{latest.name}</p><p className="text-xs text-muted-foreground">Edited {new Date(latest.at).toLocaleDateString()}</p></div>
+                  <Button onClick={() => openMade(latest.id)} className={primary}><FileText className="h-4 w-4" />Edit</Button>
+                </div>
+                <div className="h-[78vh] overflow-hidden rounded-lg border bg-glass-strong"><LetterPreview letter={latest.letter} fit onClick={() => openMade(latest.id)} /></div>
+                {others.length > 0 && <div><p className="mb-2 text-xs font-semibold uppercase text-muted-foreground">Other cover letters</p><div className="grid gap-2 sm:grid-cols-2">{others.map((m) => <Button key={m.id} onClick={() => openMade(m.id)} className="flex items-center gap-3 rounded-lg glass p-3 text-left"><FileText className="h-6 w-6 shrink-0 text-muted-foreground" /><div className="min-w-0"><div className="truncate text-sm font-medium">{m.name}</div><div className="text-xs text-muted-foreground">Edited {new Date(m.at).toLocaleDateString()}</div></div></Button>)}</div></div>}
+              </div>
+            )}
+          </div>
+          <div className="min-w-0 lg:pt-5">
+            <DocumentHistory key={historyKey} kind="Cover letter" title="Past cover letters" className="mt-0" onUse={(d) => void pickPast(d.id)}
+              intro="Your uploaded and created cover letters, newest first. Choose Use on an uploaded one to open an editable copy of it (the file stays as it is)." />
+          </div>
+        </div>
+      </>
+    );
+  }
 
   const l = letter;
   const set = (patch: Partial<Letter>) => change({ ...l, ...patch });
@@ -113,7 +201,7 @@ export function CoverLetterCreator({ letterId }: { letterId?: string | undefined
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <Button aria-label="New letter" title="New letter" onClick={() => { setLetter(null); setRowId(''); void navigate({ to: '/preparation', search: { tab: 'create' } }); }} className="grid h-8 w-8 place-items-center rounded-md hover:bg-muted"><ArrowLeft className="h-4 w-4" /></Button>
+          <Button aria-label="Back to your cover letters" title="Back to your cover letters" onClick={() => { clearTimeout(timer.current); setLetter(null); setRowId(''); setView('list'); void navigate({ to: '/preparation', search: { tab: 'create' } }); }} className="grid h-8 w-8 place-items-center rounded-md hover:bg-muted"><ArrowLeft className="h-4 w-4" /></Button>
           <div><p className="font-semibold">{nameOf(l)}</p><p role="status" className="flex items-center gap-1 text-xs text-muted-foreground"><Check className="h-3 w-3" />{saved || 'Saved'}</p></div>
         </div>
         <div className="flex gap-2">
@@ -173,15 +261,17 @@ function IconButton({ label, children, ...props }: { label: string; children: Re
 }
 
 /** The letter on an A4 page, sized like the download (mm and pt scaled by the zoom). */
-function LetterPreview({ letter: l }: { letter: Letter }) {
+function LetterPreview({ letter: l, fit = false, onClick }: { letter: Letter; fit?: boolean; onClick?: () => void }) {
   const [zoom, setZoom] = useState(70);
+  const box = useRef<HTMLDivElement>(null);
+  useEffect(() => { const w = box.current?.clientWidth; if (fit && w) setZoom(Math.max(40, Math.min(110, Math.floor((w - 40) / (210 * 3.78) * 20) * 5))); }, [fit]);
   const mm = (v: number) => `${v * 3.78 * zoom / 100}px`;
   const pt = (v: number) => `${v * 1.333 * zoom / 100}px`;
   const [r, g, b] = ACCENT_RGB[l.format.accent];
   const gap = pt(l.format.fontSize * 0.9);
   return (
-    <div className="flex min-w-0 flex-col">
-      <div className="flex h-12 items-center justify-between border-b px-4">
+    <div className={`flex min-w-0 flex-col ${fit ? 'h-full' : ''}`}>
+      <div className="flex h-12 shrink-0 items-center justify-between border-b px-4">
         <span className="text-xs font-semibold">LIVE PREVIEW</span>
         <div className="flex items-center gap-1">
           <IconButton label="Zoom out" disabled={zoom <= 40} onClick={() => setZoom(zoom - 5)}><Minus /></IconButton>
@@ -189,8 +279,8 @@ function LetterPreview({ letter: l }: { letter: Letter }) {
           <IconButton label="Zoom in" disabled={zoom >= 110} onClick={() => setZoom(zoom + 5)}><Plus /></IconButton>
         </div>
       </div>
-      <div className="flex-1 overflow-auto bg-muted/40 p-5 lg:max-h-[80vh]">
-        <div className="mx-auto bg-white text-[#2a2a2a] shadow" style={{ width: mm(210), minHeight: mm(297), padding: mm(l.format.margin), fontFamily: l.format.font, fontSize: pt(l.format.fontSize), lineHeight: 1.45 }}>
+      <div ref={box} className={`min-h-0 flex-1 overflow-auto bg-muted/40 p-5 ${fit ? '' : 'lg:max-h-[80vh]'}`}>
+        <div onClick={onClick} title={onClick ? 'Edit this letter' : undefined} className={`mx-auto bg-white text-[#2a2a2a] shadow ${onClick ? 'cursor-pointer' : ''}`} style={{ width: mm(210), minHeight: mm(297), padding: mm(l.format.margin), fontFamily: l.format.font, fontSize: pt(l.format.fontSize), lineHeight: 1.45 }}>
           <p style={{ fontSize: pt(l.format.fontSize + 5), fontWeight: 700, color: `rgb(${r},${g},${b})` }}>{l.sender.name || 'Your name'}</p>
           <p style={{ fontSize: pt(l.format.fontSize - 1), marginBottom: gap }}>{l.sender.contact}</p>
           <p style={{ marginBottom: gap }}>{l.date}</p>

@@ -20,7 +20,7 @@ export const uploadDocumentFn = createServerFn({ method: 'POST' })
     const { uploadDocument } = await import('./notion-db.server');
     const { dateOf, tableOf } = await import('./documents.server');
     const r = await uploadDocument(context.userId, data.name, data.type, data.data, tableOf(data.kind), data.date ?? dateOf(data.name) ?? `${new Date().toISOString().slice(0, 7)}-01`);
-    return r.error ? { ok: false as const, error: r.error.message } : { ok: true as const };
+    return r.error ? { ok: false as const, error: r.error.message } : { ok: true as const, id: String((r.data as { id?: unknown } | null)?.id ?? '') };
   });
 
 /** A fresh link to open an uploaded file (links stored in Notion expire after an hour). */

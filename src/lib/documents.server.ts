@@ -53,7 +53,7 @@ async function fileText(url: string): Promise<string> {
       return (await mammoth.extractRawText({ buffer: Buffer.from(buf) })).value.trim();
     }
     return new TextDecoder().decode(buf).trim();
-  } catch { return ''; }
+  } catch (e) { console.error('cover letter text:', (e as Error).message); return ''; }
 }
 
 /** The user's past cover letters with their text, newest first. Text of uploaded files is read once and saved on the
@@ -72,4 +72,21 @@ export async function pastLetters(uid: string, limit = 12, extract = 6): Promise
     if (r.text) await db.from('cover_letters').update({ text: r.text }).eq('id', r.id);
   }
   return rows.map(({ file: _f, ...r }) => r);
+}
+
+/** One past cover letter with its text (read from the uploaded file once, then saved on the row). */
+export async function letterSource(uid: string, id: string) {
+  const { userClient } = await import('@/integrations/supabase/client.server');
+  const { freshFileUrl } = await import('./notion-db.server');
+  const db = userClient(uid);
+  const { data: row } = await db.from('cover_letters').select('*').eq('id', id).maybeSingle();
+  if (!row) return null;
+  let text = String(row['text'] ?? '');
+  // Ask Notion for the file even when the cached row shows none: a just-uploaded row is cached without its file link.
+  if (!text && !(row['data'] as { paragraphs?: unknown } | null)?.paragraphs) {
+    const url = await freshFileUrl('cover_letters', uid, id);
+    text = url ? (await fileText(url)).slice(0, 20000) : '';
+    if (text) await db.from('cover_letters').update({ text }).eq('id', id);
+  }
+  return { name: String(row['name']), text, data: row['data'] as unknown, parsed: row['parsed'] as unknown };
 }

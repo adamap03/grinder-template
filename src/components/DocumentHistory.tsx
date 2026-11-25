@@ -16,7 +16,8 @@ const toBase64 = (buf: ArrayBuffer) => {
 };
 
 /** Uploaded old CVs or cover letters, newest first, so changes over time are easy to follow. */
-export function DocumentHistory({ kind, title, intro, className = 'mt-8' }: { kind: 'CV' | 'Cover letter'; title: string; intro: string; className?: string }) {
+/** onUse: adds a "Use" button to uploaded files (the cover letter creator opens an editable copy). */
+export function DocumentHistory({ kind, title, intro, className = 'mt-8', onUse }: { kind: 'CV' | 'Cover letter'; title: string; intro: string; className?: string; onUse?: (d: Doc) => void }) {
   const list = useServerFn(listDocuments);
   const upload = useServerFn(uploadDocumentFn);
   const remove = useServerFn(removeDocument);
@@ -99,6 +100,7 @@ export function DocumentHistory({ kind, title, intro, className = 'mt-8' }: { ki
                 <input type="month" aria-label={`Month of ${d.name}`} defaultValue={d.date?.slice(0, 7) ?? ''} onBlur={(e) => void change(d, { date: e.target.value ? `${e.target.value}-01` : null })} className="w-36 shrink-0 rounded border border-transparent bg-transparent px-1 text-xs text-muted-foreground hover:border-border focus:border-border" />
                 <input aria-label={`Name of ${d.name}`} defaultValue={d.name} onBlur={(e) => void change(d, { name: e.target.value })} onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }} className="min-w-0 flex-1 rounded border border-transparent bg-transparent px-1 font-medium hover:border-border focus:border-border" />
                 <Button aria-label={`Open ${d.name} in a new tab`} onClick={() => void view(d)} className="flex items-center gap-1 rounded-md border px-2 py-1 text-xs"><ExternalLink className="h-3.5 w-3.5" />{d.created ? 'Edit' : 'Open'}</Button>
+                {onUse && !d.created && <Button aria-label={`Use ${d.name} as an editable letter`} onClick={() => onUse(d)} className="rounded-md bg-primary px-2 py-1 text-xs font-medium text-primary-foreground">Use</Button>}
                 {ready?.id === d.id && <a href={ready.url} target="_blank" rel="noreferrer" onClick={() => setReady(null)} className="text-xs text-primary underline">Your browser blocked the new tab: click to open</a>}
                 {<Button aria-label={`Remove ${d.name}`} onClick={() => drop(d)} className="p-1 text-muted-foreground hover:text-destructive"><Trash2 className="h-3.5 w-3.5" /></Button>}
               </div>

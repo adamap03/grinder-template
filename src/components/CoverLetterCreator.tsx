@@ -6,6 +6,7 @@ import { DocumentHistory } from '@/components/DocumentHistory';
 import { uploadDocumentFn } from '@/lib/documents.functions';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/Button';
+import { pdfEmbedUrl } from '@/lib/utils';
 import { draftCoverLetter, pastLetterFile, pastLetterParts } from '@/lib/cover-letter.functions';
 import { ACCENT_RGB, LETTER_TYPES, blankLetter, letterDOCX, letterPDF, letterText, readLetter, todayLong, type Letter, type LetterType } from '@/lib/cover-letter-model';
 
@@ -198,7 +199,7 @@ export function CoverLetterCreator({ letterId }: { letterId?: string | undefined
                 </div>
                 <div className="h-[78vh] overflow-hidden rounded-lg border bg-glass-strong">
                   {!viewing.url ? <div className="grid h-full place-items-center"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
-                    : viewing.pdf ? <iframe title={viewing.name} src={viewing.url} className="h-full w-full border-0 bg-white" />
+                    : viewing.pdf ? <iframe title={viewing.name} src={pdfEmbedUrl(viewing.url)} className="h-full w-full border-0 bg-white" />
                     : viewing.text ? <div className="h-full overflow-auto bg-muted/40 p-5"><div className="mx-auto max-w-[650px] whitespace-pre-wrap bg-white p-10 text-sm text-[#2a2a2a] shadow">{viewing.text}</div></div>
                     : <p className="p-5 text-sm">This file's text could not be read here. <a href={viewing.url} target="_blank" rel="noreferrer" className="underline">Download it</a> to read it.</p>}
                 </div>

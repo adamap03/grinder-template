@@ -4,6 +4,7 @@ import { useServerFn } from '@tanstack/react-start';
 import { ChevronDown, ExternalLink, Loader2, Plus, RefreshCw, Search, Trash2, X } from 'lucide-react';
 import { Shell } from '@/components/Shell';
 import { Button } from '@/components/Button';
+import { pdfEmbedUrl } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { companyLink } from '@/lib/company-slug';
 import { cleanDomain, logoFor } from '@/lib/companies';
@@ -277,7 +278,7 @@ function FirmView({ firm, onClose, onPatch, onRemove }: { firm: Firm; onClose: (
                     ))}
                   </ul>
                 </div>
-              ) : <iframe title={`${firm.name} job board`} src={url} className="absolute inset-0 h-full w-full border-0 bg-white" sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox" referrerPolicy="no-referrer" />}
+              ) : <iframe title={`${firm.name} job board`} src={/\.pdf($|[?#])/i.test(url) ? pdfEmbedUrl(url) : url} className="absolute inset-0 h-full w-full border-0 bg-white" sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox" referrerPolicy="no-referrer" />}
           </div>
           <aside className="space-y-3 overflow-y-auto border-l p-4">
             <h2 className="font-semibold">Details</h2>

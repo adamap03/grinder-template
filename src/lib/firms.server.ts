@@ -334,6 +334,24 @@ async function oracleJobs(url: string): Promise<VacancyRead | null> {
   };
 }
 
+/** The text of one job advert. Oracle Recruiting Cloud job pages render in the browser, so their advert is read from
+ *  the site's public job feed instead; any other page is read as usual. */
+export async function advertText(url: string): Promise<string> {
+  const u = new URL(url);
+  const m = u.pathname.match(/\/sites\/(CX_\d+)\/job\/(\d+)/);
+  if (/\.oraclecloud\.com$/.test(u.hostname) && m) {
+    const feed = `https://${u.hostname}/hcmRestApi/resources/latest/recruitingCEJobRequisitionDetails?expand=all&onlyData=true&finder=ById;Id=%22${m[2]}%22,siteNumber=${m[1]}`;
+    const r = await fetchPage(feed, { headers: { 'User-Agent': 'Mozilla/5.0 (compatible; Grinder/1.0)', Accept: 'application/json' } }).catch(() => null);
+    const j = r?.ok ? ((await r.json()).items?.[0] as Record<string, unknown> | undefined) : undefined;
+    if (j) {
+      const clean = (v: unknown) => String(v ?? '').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/\s+/g, ' ').trim();
+      return [`Job title: ${clean(j['Title'])}`, `Location: ${clean(j['PrimaryLocation'])}`, `Closing: ${clean(j['ExternalPostedEndDate']).slice(0, 10)}`,
+        clean(j['ExternalDescriptionStr']), clean(j['ExternalQualificationsStr']), clean(j['ExternalResponsibilitiesStr'])].filter(Boolean).join('\n');
+    }
+  }
+  return extractPage(url);
+}
+
 // MHR iTrent recruitment sites (public bodies, e.g. Forestry and Land Scotland): the search page hands every visitor a
 // guest session and fills its list from a JSON file; read that file the same way the page does.
 async function itrentJobs(url: string): Promise<VacancyRead | null> {

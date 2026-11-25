@@ -4,6 +4,8 @@ import { requireSupabaseAuth } from '@/integrations/supabase/auth-middleware';
 import { LETTER_TYPES } from './cover-letter-model';
 
 const Draft = z.object({
+  company: z.string().describe('The employer, as named in the advert.'),
+  role: z.string().describe('The job title or scheme, as named in the advert.'),
   inspired_by: z.array(z.string()).describe('Exact names of the past letters you drew on (only ones for similar roles or firms); empty if none fit.'),
   recipient: z.string().describe('Recipient block, one item per line: the named contact and title if the advert gives one, else "Hiring Manager" or "Graduate Recruitment Team", then the firm and its office address if known.'),
   salutation: z.string().describe('"Dear Ms Smith," when a name is known, else "Dear Hiring Manager,".'),
@@ -18,31 +20,31 @@ export const draftCoverLetter = createServerFn({ method: 'POST' })
   .middleware([requireSupabaseAuth])
   .inputValidator((d) => z.object({
     type: z.enum(LETTER_TYPES.map((t) => t.id) as [string, ...string[]]),
-    company: z.string().trim().min(1).max(200),
-    role: z.string().trim().max(200),
     job: z.string().max(20000),
     jobUrl: z.string().url().max(2000).or(z.literal('')),
-  }).parse(d))
+    facts: z.string().max(4000),
+  }).refine((d) => d.jobUrl || d.job.trim().length >= 30, 'Give the link to the advert, or paste the advert.').parse(d))
   .handler(async ({ data, context }) => {
     try {
       const { allowDemo } = await import('./demo.server');
       await allowDemo('research');
       const { userClient } = await import('@/integrations/supabase/client.server');
       const { pastLetters } = await import('./documents.server');
-      const { claudeObject, extractPage } = await import('./claude.server');
+      const { claudeObject } = await import('./claude.server');
+      const { advertText } = await import('./firms.server');
       const [resume, letters, advert] = await Promise.all([
         userClient(context.userId).from('resumes').select('data').order('updated_at', { ascending: false }).limit(1).maybeSingle(),
         pastLetters(context.userId),
-        data.jobUrl ? extractPage(data.jobUrl).catch(() => '') : Promise.resolve(''),
+        data.jobUrl ? advertText(data.jobUrl).catch(() => '') : Promise.resolve(''),
       ]);
+      if (!advert.trim() && data.job.trim().length < 30) return { ok: false as const, error: 'That link could not be read (the job site may only show the advert in a browser). Paste the advert text instead.' };
       const type = LETTER_TYPES.find((t) => t.id === data.type)!;
       const past = letters.filter((l) => l.text).map((l) => `### ${l.name} (${l.date ?? 'undated'})\n${l.text.slice(0, 3500)}`).join('\n\n');
       const prompt = [
         `LETTER TYPE: ${type.name}. ${type.guide}`,
-        `FIRM: ${data.company}`,
-        `ROLE: ${data.role || '(not given)'}`,
         `JOB ADVERT (pasted): ${data.job.slice(0, 12000) || '(none)'}`,
         `JOB ADVERT (from ${data.jobUrl || 'no link'}): ${advert.slice(0, 12000) || '(none)'}`,
+        `EXPERIENCE OR FACTS THE CANDIDATE WANTS INCLUDED (their own words, true; work them in where they fit the role): ${data.facts.trim() || '(none)'}`,
         `CANDIDATE CV (latest): ${JSON.stringify(resume.data?.['data'] ?? null).slice(0, 16000)}`,
         `PAST COVER LETTERS (newest first):\n${past || '(none yet)'}`,
       ].join('\n\n');

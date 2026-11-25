@@ -29,7 +29,7 @@ export function CoverLetterCreator({ letterId }: { letterId?: string | undefined
   const navigate = useNavigate();
   const draft = useServerFn(draftCoverLetter);
   const [signedIn, setSignedIn] = useState<boolean | null>(null);
-  const [form, setForm] = useState({ type: LETTER_TYPES[0].id as LetterType, company: '', role: '', jobUrl: '', job: '' });
+  const [form, setForm] = useState({ type: LETTER_TYPES[0].id as LetterType, jobUrl: '', job: '', facts: '' });
   const [rowId, setRowId] = useState(letterId ?? '');
   const [letter, setLetter] = useState<Letter | null>(null);
   const [busy, setBusy] = useState('');
@@ -111,15 +111,15 @@ export function CoverLetterCreator({ letterId }: { letterId?: string | undefined
   }
   async function start(withClaude: boolean) {
     setError('');
-    if (!form.company.trim()) { setError('Enter the firm first.'); return; }
+    if (!form.jobUrl.trim() && form.job.trim().length < 30) { setError('Paste the link to the advert, or the advert itself.'); return; }
     if (!withClaude) return;
-    setBusy(withClaude ? 'Claude is reading the advert, your CV and your past letters (about a minute)…' : 'Starting…');
+    setBusy('Claude is reading the advert, your CV and your past letters (about a minute)…');
     try {
-      const l = { ...blankLetter(form.type, await senderFromCV()), company: form.company.trim(), role: form.role.trim() };
+      const l = blankLetter(form.type, await senderFromCV());
       if (withClaude) {
-        const r = await draft({ data: { type: form.type, company: l.company, role: l.role, job: form.job, jobUrl: form.jobUrl.trim() } });
+        const r = await draft({ data: { type: form.type, job: form.job, jobUrl: form.jobUrl.trim(), facts: form.facts } });
         if (!r.ok) throw new Error(r.error);
-        Object.assign(l, { recipient: r.draft.recipient, salutation: r.draft.salutation, paragraphs: r.draft.paragraphs, signOff: r.draft.sign_off, inspiredBy: r.draft.inspired_by, check: r.draft.check });
+        Object.assign(l, { company: r.draft.company, role: r.draft.role, recipient: r.draft.recipient, salutation: r.draft.salutation, paragraphs: r.draft.paragraphs, signOff: r.draft.sign_off, inspiredBy: r.draft.inspired_by, check: r.draft.check });
       }
       await create(l);
     } catch (e) { setError((e as Error).message); } finally { setBusy(''); }
@@ -140,22 +140,21 @@ export function CoverLetterCreator({ letterId }: { letterId?: string | undefined
   if (!letter && view === 'draft') return (
     <div className="max-w-3xl space-y-5">
       <Button onClick={() => setView('list')} className="flex items-center gap-1 text-sm text-muted-foreground"><ArrowLeft className="h-4 w-4" />Back to your cover letters</Button>
-      <p className="text-muted-foreground">Choose the kind of letter, tell Claude the firm and the role, and paste the advert or its link. Claude drafts it from your latest CV and your past cover letters for similar roles; you then edit it beside a live preview.</p>
-      <fieldset className="grid gap-3 sm:grid-cols-2">
-        <legend className="mb-2 text-sm font-semibold">Type of letter</legend>
-        {LETTER_TYPES.map((t) => (
-          <label key={t.id} className={`cursor-pointer rounded-lg glass p-4 ${form.type === t.id ? 'ring-2 ring-ring' : ''}`}>
-            <input type="radio" name="letter-type" value={t.id} checked={form.type === t.id} onChange={() => setForm({ ...form, type: t.id })} className="sr-only" />
-            <span className="block font-medium">{t.name}</span><span className="text-sm text-muted-foreground">{t.blurb}</span>
-          </label>
-        ))}
-      </fieldset>
-      <div className="grid gap-3 sm:grid-cols-2">
-        <label className="space-y-1 text-xs font-medium text-muted-foreground">Firm<input required maxLength={200} value={form.company} onChange={(e) => setForm({ ...form, company: e.target.value })} className={input} /></label>
-        <label className="space-y-1 text-xs font-medium text-muted-foreground">Role or scheme<input maxLength={200} value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })} className={input} /></label>
+      <p className="text-muted-foreground">Choose the kind of letter and give the advert (its link, or the text if there is no link). Claude works out the firm and the role, and drafts the letter from your latest CV, your past cover letters for similar roles and anything you add below; you then edit it beside a live preview.</p>
+      <div role="radiogroup" aria-label="Type of letter">
+        <p className="mb-2 text-sm font-semibold">Type of letter</p>
+        <div className="grid gap-3 sm:grid-cols-3">
+          {LETTER_TYPES.map((t) => (
+            <Button key={t.id} role="radio" aria-checked={form.type === t.id} onClick={() => setForm((f) => ({ ...f, type: t.id }))}
+              className={`rounded-lg glass p-4 text-left ${form.type === t.id ? 'ring-2 ring-ring' : 'opacity-80 hover:opacity-100'}`}>
+              <span className="block font-medium">{t.name}</span><span className="text-sm text-muted-foreground">{t.blurb}</span>
+            </Button>
+          ))}
+        </div>
       </div>
-      <label className="block space-y-1 text-xs font-medium text-muted-foreground">Link to the advert (optional)<input type="url" maxLength={2000} placeholder="https://…" value={form.jobUrl} onChange={(e) => setForm({ ...form, jobUrl: e.target.value })} className={input} /></label>
-      <label className="block space-y-1 text-xs font-medium text-muted-foreground">Or paste the advert (optional)<textarea rows={6} maxLength={20000} value={form.job} onChange={(e) => setForm({ ...form, job: e.target.value })} className={input} /></label>
+      <label className="block space-y-1 text-xs font-medium text-muted-foreground">Link to the advert<input type="url" maxLength={2000} placeholder="https://…" value={form.jobUrl} onChange={(e) => setForm({ ...form, jobUrl: e.target.value })} className={input} /></label>
+      <label className="block space-y-1 text-xs font-medium text-muted-foreground">No link? Paste the advert here<textarea rows={6} maxLength={20000} value={form.job} onChange={(e) => setForm({ ...form, job: e.target.value })} className={input} /></label>
+      <label className="block space-y-1 text-xs font-medium text-muted-foreground">Experience or facts to include (optional)<textarea rows={4} maxLength={4000} placeholder="e.g. I have scanned buildings with my phone's LiDAR to make 3D models, and 3D-printed some of them." value={form.facts} onChange={(e) => setForm({ ...form, facts: e.target.value })} className={input} /></label>
       {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
       <Button disabled={!!busy} onClick={() => void start(true)} className={primary}>{busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}Draft with Claude</Button>
       {busy && <p role="status" className="text-sm text-muted-foreground">{busy}</p>}

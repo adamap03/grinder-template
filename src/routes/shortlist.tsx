@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from '@tanstack/react-router';
 import { useEffect, useMemo, useState } from 'react';
 import { useServerFn } from '@tanstack/react-start';
-import { ExternalLink, Loader2, Plus, RefreshCw, Search, Trash2, X } from 'lucide-react';
+import { ChevronDown, ExternalLink, Loader2, Plus, RefreshCw, Search, Trash2, X } from 'lucide-react';
 import { Shell } from '@/components/Shell';
 import { Button } from '@/components/Button';
 import { supabase } from '@/integrations/supabase/client';
@@ -146,6 +146,8 @@ function Updates({ onOpen, onChecked }: { onOpen: (firmId: string) => void; onCh
   const start = useServerFn(checkJobBoardsNow);
   const [u, setU] = useState<Awaited<ReturnType<typeof jobUpdates>> | null>(null);
   const [error, setError] = useState('');
+  const [open, setOpen] = useState(() => { try { return localStorage.getItem('grinder.updates.open') !== '0'; } catch { return true; } });
+  const toggle = () => setOpen((o) => { try { localStorage.setItem('grinder.updates.open', o ? '0' : '1'); } catch { /* private mode */ } return !o; });
   const load = async () => { const r = await get().catch(() => null); if (r) setU(r); return r; };
   useEffect(() => { void load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   // While a check runs, show its progress and refresh the cards when it ends.
@@ -166,18 +168,19 @@ function Updates({ onOpen, onChecked }: { onOpen: (firmId: string) => void; onCh
     <section aria-label="Updates" className="mx-auto mt-8 max-w-4xl rounded-lg glass p-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="flex items-center gap-2 font-semibold">Updates{!!u?.postings.length && <span className="rounded-full bg-primary px-2 py-0.5 text-xs text-primary-foreground">{u.postings.length} new</span>}</h2>
-          <p className="text-xs text-muted-foreground">
+          <h2><Button aria-expanded={open} onClick={toggle} className="flex items-center gap-2 font-semibold"><ChevronDown className={`h-4 w-4 transition ${open ? '' : '-rotate-90'}`} />Updates{!!u?.postings.length && <span className="rounded-full bg-primary px-2 py-0.5 text-xs text-primary-foreground">{u.postings.length} new</span>}</Button></h2>
+          {open && <p className="text-xs text-muted-foreground">
             {u?.status.running ? `Reading job boards… ${u.status.done} of ${u.status.total}`
               : u?.checked_at ? `Job boards read ${day(u.checked_at)}; next check ${u.next_at ? day(u.next_at) : 'soon'}. New postings from the last 7 days.`
               : "Every shortlisted firm's job board is read once a week, and new postings are listed here."}
-          </p>
+          </p>}
         </div>
         <Button disabled={!u || u.status.running} onClick={() => void now()} className="flex items-center gap-1 rounded-md border px-3 py-1.5 text-sm disabled:opacity-60">
           {u?.status.running ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}Check now
         </Button>
       </div>
       {error && <p role="alert" className="mt-2 text-xs text-destructive">{error}</p>}
+      {open && <>
       {u && !u.status.running && u.checked_at && !u.postings.length && <p className="mt-3 text-sm text-muted-foreground">No new postings on your shortlisted firms' job boards this week.</p>}
       {byFirm.length > 0 && (
         <ul className="mt-3 space-y-3">
@@ -197,6 +200,13 @@ function Updates({ onOpen, onChecked }: { onOpen: (firmId: string) => void; onCh
           ))}
         </ul>
       )}
+      {u && !u.status.running && u.unread.length > 0 && (
+        <p className="mt-3 text-xs text-muted-foreground">
+          Read {u.boards - u.unread.length} of {u.boards} job boards. These only show their listings in a browser, so check them yourself:{' '}
+          {u.unread.map((f, i) => <span key={f.id}>{i ? ', ' : ''}<Button onClick={() => onOpen(f.id)} className="underline">{f.name}</Button></span>)}.
+        </p>
+      )}
+      </>}
     </section>
   );
 }

@@ -116,8 +116,8 @@ export const checkShortlistFirm = createServerFn({ method: 'POST' })
       await allowDemo('research');
       const f = await import('./firms.server');
       const [v, frame] = await Promise.all([f.readVacancies(String(row['name']), url), f.embeddable(url)]);
-      const { mergePostings } = await import('./job-updates.server');
-      const patch = { vacancies: v.readable ? mergePostings(row['vacancies'] as never, v.vacancies, row['vacancy_count'] == null) : v.vacancies, vacancy_count: v.readable ? v.vacancies.length : null, vacancy_note: v.note, embeddable: frame === null ? '' : frame ? 'yes' : 'no', checked_at: new Date().toISOString() };
+      const { isBaseline, mergePostings } = await import('./job-updates.server');
+      const patch = { vacancies: v.readable ? mergePostings(row['vacancies'] as never, v.vacancies, isBaseline(row['vacancy_count'], row['vacancies'] as never)) : v.vacancies, vacancy_count: v.readable ? v.vacancies.length : null, vacancy_note: v.note, embeddable: frame === null ? '' : frame ? 'yes' : 'no', checked_at: new Date().toISOString() };
       await db.from('shortlist').update(patch).eq('id', data.id);
       return { ok: true as const, ...patch };
     } catch (e) {

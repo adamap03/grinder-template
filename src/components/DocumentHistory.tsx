@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from '@tanstack/react-router';
 import { useServerFn } from '@tanstack/react-start';
 import { ExternalLink, Loader2, Trash2, Upload } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
@@ -15,12 +16,13 @@ const toBase64 = (buf: ArrayBuffer) => {
 };
 
 /** Uploaded old CVs or cover letters, newest first, so changes over time are easy to follow. */
-export function DocumentHistory({ kind, title, intro }: { kind: 'CV' | 'Cover letter'; title: string; intro: string }) {
+export function DocumentHistory({ kind, title, intro, className = 'mt-8' }: { kind: 'CV' | 'Cover letter'; title: string; intro: string; className?: string }) {
   const list = useServerFn(listDocuments);
   const upload = useServerFn(uploadDocumentFn);
   const remove = useServerFn(removeDocument);
   const open = useServerFn(openDocument);
   const edit = useServerFn(editDocument);
+  const navigate = useNavigate();
   const [docs, setDocs] = useState<Doc[] | null>(null);
   const [signedIn, setSignedIn] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);
@@ -52,6 +54,8 @@ export function DocumentHistory({ kind, title, intro }: { kind: 'CV' | 'Cover le
   }
   // Open a blank tab straight away (so it is not blocked as a pop-up), then point it at a fresh file link.
   async function view(d: Doc) {
+    // Letters made in the app have no file: open them in the cover letter creator.
+    if (d.created) { void navigate({ to: '/preparation', search: { tab: 'create', letter: d.id } }); return; }
     const w = window.open('about:blank', '_blank');
     const r = await open({ data: { kind, id: d.id } }).catch(() => ({ url: null }));
     if (r.url && w) w.location.href = r.url;
@@ -72,7 +76,7 @@ export function DocumentHistory({ kind, title, intro }: { kind: 'CV' | 'Cover le
 
   if (signedIn === false) return null;
   return (
-    <section aria-label={title} className="mt-8 rounded-lg glass p-5">
+    <section aria-label={title} className={`${className} rounded-lg glass p-5`}>
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h2 className="text-lg font-semibold">{title}</h2>
@@ -94,7 +98,7 @@ export function DocumentHistory({ kind, title, intro }: { kind: 'CV' | 'Cover le
               <div className="flex flex-wrap items-center gap-2 text-sm">
                 <input type="month" aria-label={`Month of ${d.name}`} defaultValue={d.date?.slice(0, 7) ?? ''} onBlur={(e) => void change(d, { date: e.target.value ? `${e.target.value}-01` : null })} className="w-36 shrink-0 rounded border border-transparent bg-transparent px-1 text-xs text-muted-foreground hover:border-border focus:border-border" />
                 <input aria-label={`Name of ${d.name}`} defaultValue={d.name} onBlur={(e) => void change(d, { name: e.target.value })} onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }} className="min-w-0 flex-1 rounded border border-transparent bg-transparent px-1 font-medium hover:border-border focus:border-border" />
-                <Button aria-label={`Open ${d.name} in a new tab`} onClick={() => void view(d)} className="flex items-center gap-1 rounded-md border px-2 py-1 text-xs"><ExternalLink className="h-3.5 w-3.5" />Open</Button>
+                <Button aria-label={`Open ${d.name} in a new tab`} onClick={() => void view(d)} className="flex items-center gap-1 rounded-md border px-2 py-1 text-xs"><ExternalLink className="h-3.5 w-3.5" />{d.created ? 'Edit' : 'Open'}</Button>
                 {ready?.id === d.id && <a href={ready.url} target="_blank" rel="noreferrer" onClick={() => setReady(null)} className="text-xs text-primary underline">Your browser blocked the new tab: click to open</a>}
                 {<Button aria-label={`Remove ${d.name}`} onClick={() => drop(d)} className="p-1 text-muted-foreground hover:text-destructive"><Trash2 className="h-3.5 w-3.5" /></Button>}
               </div>

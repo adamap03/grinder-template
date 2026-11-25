@@ -142,7 +142,7 @@ async function readViaClaude(url: string): Promise<string> {
 }
 
 /** Text of a PDF (e.g. a register published as a PDF), page by page, with the same pdf.js the resume upload uses. */
-async function pdfText(data: ArrayBuffer): Promise<string> {
+export async function pdfText(data: ArrayBuffer): Promise<string> {
   const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
   // On the server pdf.js runs its worker in-process; loading the worker module here (instead of letting pdf.js look
   // for the file at run time) makes the bundler include it.

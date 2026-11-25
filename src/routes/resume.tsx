@@ -14,4 +14,4 @@ export const Route = createFileRoute('/resume')({
     }),
   component: ResumePage,
 });
-function ResumePage(){const {job,target}=Route.useSearch();return <Shell><ResumeWorkspace jobURL={job || ''} target={target || ''}/><DocumentHistory kind="CV" title="Resume history" intro="Past CVs you upload here (up to 5 MB each), newest first, so you can see how they have changed."/></Shell>;}
+function ResumePage(){const {job,target}=Route.useSearch();return <Shell><ResumeWorkspace jobURL={job || ''} target={target || ''} aside={<DocumentHistory kind="CV" title="Resume history" intro="Past CVs you upload here (up to 5 MB each), newest first, so you can see how they have changed." className="mt-0"/>}/></Shell>;}

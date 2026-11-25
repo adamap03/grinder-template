@@ -32,7 +32,9 @@ const TABLES: Record<string, Spec> = {
   resume_files: { title: 'Resume files', cols: { path: 't', user_id: 't', file: 'f' }, key: ['path'] },
   // Old CVs (Resume page, "Resume history") and old cover letters (Preparation, "Past cover letters"), uploaded by hand.
   resume_history: { title: 'Resume history', cols: { name: 't', id: 't', user_id: 't', date: 'd', file: 'f', notes: 't', created_at: 't' }, key: ['id'], owner: true, defaults: { notes: '' } },
-  cover_letters: { title: 'Past cover letters', cols: { name: 't', id: 't', user_id: 't', date: 'd', file: 'f', notes: 't', created_at: 't' }, key: ['id'], owner: true, defaults: { notes: '' } },
+  // Cover letters made in the app (Preparation > Create new cover letter) have data (the letter) and no file; text = the
+  // letter as plain text, also read once from uploaded files so new drafts can draw on similar past letters.
+  cover_letters: { title: 'Past cover letters', cols: { name: 't', id: 't', user_id: 't', date: 'd', file: 'f', notes: 't', text: 't', data: 'j', created_at: 't' }, key: ['id'], owner: true, defaults: { notes: '', text: '' } },
   // Engineering job search (Scotland first): shortlist from Discover, applications, preparation, contacts, profile.
   shortlist: { title: 'Shortlist', cols: { name: 't', id: 't', user_id: 't', company_number: 't', town: 't', postcode: 't', website: 'u', careers_url: 'u', summary: 't', sic: 't', size: 't', notes: 't', tags: 't', vacancy_count: 'n?', vacancies: 'j', vacancy_note: 't', checked_at: 't?', embeddable: 't', created_at: 't' }, key: ['user_id', 'company_number'], owner: true, defaults: { town: '', postcode: '', summary: '', sic: '', size: '', notes: '', tags: '', vacancies: [], vacancy_note: '', embeddable: '' } },
   firm_fit: { title: 'Firm fit', cols: { name: 't', id: 't', user_id: 't', company_number: 't', tier: 'n?', score: 'n?', reason: 't', scored_at: 't' }, key: ['user_id', 'company_number'], owner: true, defaults: { reason: '' } },

@@ -11,9 +11,10 @@ import { createQuiz, submitQuiz } from '@/lib/quiz.functions';
 import { pageHead } from '@/lib/seo';
 import { NotesDatabase } from '@/components/NotesDatabase';
 import { DocumentHistory } from '@/components/DocumentHistory';
+import { CoverLetterCreator } from '@/components/CoverLetterCreator';
 
 export const Route = createFileRoute('/preparation')({
-  validateSearch: (s) => z.object({ company: z.string().optional(), url: z.string().optional(), id: z.string().optional(), tab: z.enum(['quiz', 'answers', 'questions', 'letters']).optional() }).parse(s),
+  validateSearch: (s) => z.object({ company: z.string().optional(), url: z.string().optional(), id: z.string().optional(), tab: z.enum(['quiz', 'answers', 'questions', 'letters', 'create']).optional(), letter: z.string().max(60).optional() }).parse(s),
   head: () =>
     pageHead({
       title: 'Preparation — Grinder',
@@ -23,10 +24,10 @@ export const Route = createFileRoute('/preparation')({
   component: PreparationPage,
 });
 
-const TABS = [['quiz', 'Fit quiz'], ['answers', 'Repeatable answers'], ['questions', 'Common interview questions'], ['letters', 'Past cover letters']] as const;
+const TABS = [['quiz', 'Fit quiz'], ['answers', 'Repeatable answers'], ['questions', 'Common interview questions'], ['letters', 'Past cover letters'], ['create', 'Create new cover letter']] as const;
 
 function PreparationPage() {
-  const { tab = 'quiz' } = Route.useSearch();
+  const { tab = 'quiz', letter } = Route.useSearch();
   return (
     <Shell>
       <div className="py-8">
@@ -37,9 +38,9 @@ function PreparationPage() {
           ))}
         </nav>
       </div>
-      {tab === 'quiz' ? <QuizPage /> : tab === 'answers'
+      {tab === 'create' ? <CoverLetterCreator letterId={letter} /> : tab === 'quiz' ? <QuizPage /> : tab === 'answers'
         ? <NotesDatabase table="answers" titleCol="title" titleLabel="Prompt or topic" intro="Answers you have already written for applications. Copy, adapt and reuse them." />
-        : tab === 'letters' ? <DocumentHistory kind="Cover letter" title="Past cover letters" intro="Cover letters you upload here (up to 5 MB each), newest first." />
+        : tab === 'letters' ? <DocumentHistory kind="Cover letter" title="Past cover letters" intro="Cover letters you upload here (up to 5 MB each) and the ones you create in the app, newest first. New drafts draw on these." />
         : <NotesDatabase table="interview_questions" titleCol="question" titleLabel="Question" intro="Common interview questions with your prepared answers." />}
     </Shell>
   );

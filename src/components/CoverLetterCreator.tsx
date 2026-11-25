@@ -6,7 +6,7 @@ import { DocumentHistory } from '@/components/DocumentHistory';
 import { uploadDocumentFn } from '@/lib/documents.functions';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/Button';
-import { draftCoverLetter, pastLetterParts } from '@/lib/cover-letter.functions';
+import { draftCoverLetter, pastLetterFile, pastLetterParts } from '@/lib/cover-letter.functions';
 import { ACCENT_RGB, LETTER_TYPES, blankLetter, letterDOCX, letterPDF, letterText, readLetter, todayLong, type Letter, type LetterType } from '@/lib/cover-letter-model';
 
 // Preparation > Create new cover letter: pick a letter type, give the firm, role and advert, and Claude drafts a letter
@@ -42,6 +42,16 @@ export function CoverLetterCreator({ letterId }: { letterId?: string | undefined
   const [mine, setMine] = useState<Made[] | null>(null);
   const [dragging, setDragging] = useState(false);
   const [historyKey, setHistoryKey] = useState(0);
+  const fileOf = useServerFn(pastLetterFile);
+  // An uploaded past letter shown in the left panel (Open): PDFs in a viewer, other files as their text.
+  const [viewing, setViewing] = useState<{ id: string; name: string; url: string | null; text: string; pdf: boolean } | null>(null);
+  async function showPast(d: { id: string; name: string }) {
+    const pdf = /.pdf$/i.test(d.name) || !/.(docx?|odt|txt)$/i.test(d.name);
+    setViewing({ id: d.id, name: d.name, url: null, text: '', pdf });
+    const r = await fileOf({ data: { id: d.id, pdf } }).catch(() => null);
+    if (!r?.url) { setViewing(null); setError('That file could not be opened. Please retry in a moment.'); return; }
+    setViewing({ id: d.id, name: d.name, url: r.url, text: r.text, pdf });
+  }
 
   // Letters made in the app (they have data), most recently edited first.
   async function loadMine() {
@@ -173,7 +183,23 @@ export function CoverLetterCreator({ letterId }: { letterId?: string | undefined
                 <Button disabled={!!busy} className="flex items-center gap-1 text-sm" onClick={() => { setError(''); setView('draft'); }}><Sparkles className="h-4 w-4 text-amber-500" />Draft with Claude</Button>
               </div>
             </div>
-            {mine === null ? <p className="py-8 text-sm text-muted-foreground">Loading cover letters…</p> : !latest ? <p className="py-8 text-sm text-muted-foreground">No cover letters made here yet. Upload one, pick one from Past cover letters, or create one.</p> : (
+            {viewing ? (
+              <div className="space-y-3 py-5">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="min-w-0"><p className="truncate font-medium">{viewing.name}</p><p className="text-xs text-muted-foreground">Past cover letter (uploaded file)</p></div>
+                  <div className="flex gap-2">
+                    <Button onClick={() => setViewing(null)} className={secondary}><ArrowLeft className="h-4 w-4" />Current letter</Button>
+                    <Button disabled={!!busy} onClick={() => void pickPast(viewing.id)} className={primary}><FileText className="h-4 w-4" />Use</Button>
+                  </div>
+                </div>
+                <div className="h-[78vh] overflow-hidden rounded-lg border bg-glass-strong">
+                  {!viewing.url ? <div className="grid h-full place-items-center"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
+                    : viewing.pdf ? <iframe title={viewing.name} src={viewing.url} className="h-full w-full border-0 bg-white" />
+                    : viewing.text ? <div className="h-full overflow-auto bg-muted/40 p-5"><div className="mx-auto max-w-[650px] whitespace-pre-wrap bg-white p-10 text-sm text-[#2a2a2a] shadow">{viewing.text}</div></div>
+                    : <p className="p-5 text-sm">This file's text could not be read here. <a href={viewing.url} target="_blank" rel="noreferrer" className="underline">Download it</a> to read it.</p>}
+                </div>
+              </div>
+            ) : mine === null ? <p className="py-8 text-sm text-muted-foreground">Loading cover letters…</p> : !latest ? <p className="py-8 text-sm text-muted-foreground">No cover letters made here yet. Upload one, pick one from Past cover letters, or create one.</p> : (
               <div className="space-y-3 py-5">
                 <div className="flex items-center justify-between gap-3">
                   <div className="min-w-0"><p className="truncate font-medium">{latest.name}</p><p className="text-xs text-muted-foreground">Edited {new Date(latest.at).toLocaleDateString()}</p></div>
@@ -185,8 +211,8 @@ export function CoverLetterCreator({ letterId }: { letterId?: string | undefined
             )}
           </div>
           <div className="min-w-0 lg:pt-5">
-            <DocumentHistory key={historyKey} kind="Cover letter" title="Past cover letters" className="mt-0" onUse={(d) => void pickPast(d.id)}
-              intro="Your uploaded and created cover letters, newest first. Choose Use on an uploaded one to open an editable copy of it (the file stays as it is)." />
+            <DocumentHistory key={historyKey} kind="Cover letter" title="Past cover letters" className="mt-0" onUse={(d) => void pickPast(d.id)} onOpen={(d) => void showPast(d)}
+              intro="Your uploaded and created cover letters, newest first. Open shows an uploaded one on the left; Use opens an editable copy of it (the file stays as it is)." />
           </div>
         </div>
       </>

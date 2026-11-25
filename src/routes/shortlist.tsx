@@ -7,7 +7,7 @@ import { Button } from '@/components/Button';
 import { supabase } from '@/integrations/supabase/client';
 import { companyLink } from '@/lib/company-slug';
 import { cleanDomain, logoFor } from '@/lib/companies';
-import { addShortlistToDirectory, checkEmbed, checkShortlistFirm, findCareersPage } from '@/lib/firms.functions';
+import { addShortlistToDirectory, checkEmbed, checkJobBoardsNow, checkShortlistFirm, findCareersPage, jobUpdates } from '@/lib/firms.functions';
 import { pageHead } from '@/lib/seo';
 import { SECTOR_LIST, SECTORS as SECTOR_LABEL, sectorKeyOf } from '@/lib/sectors';
 import { sameFirm } from '@/lib/firm-key';
@@ -17,7 +17,9 @@ export const Route = createFileRoute('/shortlist')({
   component: ShortlistPage,
 });
 
-type Vacancy = { title: string; location: string; url: string; closing_date: string; summary: string };
+type Vacancy = { title: string; location: string; url: string; closing_date: string; summary: string; first_seen?: string };
+// A posting first seen on the job board in the last week (set by the weekly check, see src/lib/job-updates.server.ts).
+const isNew = (v: Vacancy) => !!v.first_seen && Date.now() - Date.parse(v.first_seen) < 7 * 24 * 3600_000;
 type Firm = {
   id: string; name: string; company_number: string; town: string; website: string | null; careers_url: string | null; summary: string; sic: string; size: string; notes: string; tags: string;
   vacancies: Vacancy[] | null; vacancy_note: string; checked_at: string | null; embeddable: string;
@@ -86,7 +88,8 @@ function ShortlistPage() {
       </section>
       {signedIn === false ? <p className="mt-8 text-center"><Link to="/resume" className="underline">Sign in to see your shortlist</Link></p> : (
         <>
-          <div className="mx-auto mt-8 flex max-w-4xl flex-wrap gap-2 rounded-lg glass p-3">
+          <Updates onOpen={(id) => { const f = rows?.find((x) => x.id === id); if (f) setOpen(f); }} onChecked={async () => { const r = await supabase.from('shortlist').select('*').order('created_at', { ascending: false }); if (r.data) setRows(r.data as unknown as Firm[]); }} />
+          <div className="mx-auto mt-4 flex max-w-4xl flex-wrap gap-2 rounded-lg glass p-3">
             <div className="flex min-w-[200px] flex-1 items-center gap-2 rounded-lg bg-glass-strong px-3">
               <Search className="h-4 w-4 text-muted-foreground" />
               <input aria-label="Search shortlist" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search name, place or notes…" className="h-11 flex-1 bg-transparent text-sm outline-none" />
@@ -133,6 +136,68 @@ function ShortlistPage() {
       {open && <FirmView firm={open} onClose={() => setOpen(null)} onPatch={patch} onRemove={(id) => { setRows((old) => old?.filter((x) => x.id !== id) ?? old); setOpen(null); }} />}
       {adding && <AddFirm onClose={() => setAdding(false)} onAdded={(f) => { setRows((old) => [f, ...(old || [])]); setAdding(false); setOpen(f); }} />}
     </Shell>
+  );
+}
+
+/** Top of the Shortlist: postings that appeared on shortlisted firms' job boards in the last week. Every board is read
+ *  once a week by the server; "Check now" reads them all straight away. */
+function Updates({ onOpen, onChecked }: { onOpen: (firmId: string) => void; onChecked: () => void }) {
+  const get = useServerFn(jobUpdates);
+  const start = useServerFn(checkJobBoardsNow);
+  const [u, setU] = useState<Awaited<ReturnType<typeof jobUpdates>> | null>(null);
+  const [error, setError] = useState('');
+  const load = async () => { const r = await get().catch(() => null); if (r) setU(r); return r; };
+  useEffect(() => { void load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // While a check runs, show its progress and refresh the cards when it ends.
+  useEffect(() => {
+    if (!u?.status.running) return;
+    const t = setInterval(async () => { const r = await load(); if (r && !r.status.running) { clearInterval(t); onChecked(); } }, 5000);
+    return () => clearInterval(t);
+  }, [u?.status.running]); // eslint-disable-line react-hooks/exhaustive-deps
+  async function now() {
+    setError('');
+    const r = await start();
+    if (!r.ok) { setError(r.error); return; }
+    await load();
+  }
+  const day = (iso: string) => new Date(iso).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
+  const byFirm = [...new Map((u?.postings ?? []).map((p) => [p.firm_id, { firm: p.firm, firm_id: p.firm_id, list: (u?.postings ?? []).filter((x) => x.firm_id === p.firm_id) }])).values()];
+  return (
+    <section aria-label="Updates" className="mx-auto mt-8 max-w-4xl rounded-lg glass p-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="flex items-center gap-2 font-semibold">Updates{!!u?.postings.length && <span className="rounded-full bg-primary px-2 py-0.5 text-xs text-primary-foreground">{u.postings.length} new</span>}</h2>
+          <p className="text-xs text-muted-foreground">
+            {u?.status.running ? `Reading job boards… ${u.status.done} of ${u.status.total}`
+              : u?.checked_at ? `Job boards read ${day(u.checked_at)}; next check ${u.next_at ? day(u.next_at) : 'soon'}. New postings from the last 7 days.`
+              : "Every shortlisted firm's job board is read once a week, and new postings are listed here."}
+          </p>
+        </div>
+        <Button disabled={!u || u.status.running} onClick={() => void now()} className="flex items-center gap-1 rounded-md border px-3 py-1.5 text-sm disabled:opacity-60">
+          {u?.status.running ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}Check now
+        </Button>
+      </div>
+      {error && <p role="alert" className="mt-2 text-xs text-destructive">{error}</p>}
+      {u && !u.status.running && u.checked_at && !u.postings.length && <p className="mt-3 text-sm text-muted-foreground">No new postings on your shortlisted firms' job boards this week.</p>}
+      {byFirm.length > 0 && (
+        <ul className="mt-3 space-y-3">
+          {byFirm.map((g) => (
+            <li key={g.firm_id} className="rounded-md bg-background/60 p-3">
+              <Button onClick={() => onOpen(g.firm_id)} className="text-sm font-semibold hover:underline">{g.firm}</Button>
+              <ul className="mt-1 space-y-1">
+                {g.list.map((p, i) => (
+                  <li key={i} className="flex flex-wrap items-baseline gap-x-2 text-sm">
+                    <span className="rounded-full bg-primary px-2 py-0.5 text-[10px] font-semibold uppercase text-primary-foreground">New</span>
+                    {/^https?:/.test(p.url) ? <a href={p.url} target="_blank" rel="noreferrer" className="font-medium underline">{p.title}</a> : <span className="font-medium">{p.title}</span>}
+                    <span className="text-xs text-muted-foreground">{[p.location, p.closing_date && `closes ${p.closing_date}`, p.first_seen && `seen ${day(p.first_seen)}`].filter(Boolean).join(' · ')}</span>
+                  </li>
+                ))}
+              </ul>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }
 
@@ -193,7 +258,7 @@ function FirmView({ firm, onClose, onPatch, onRemove }: { firm: Firm; onClose: (
                   <ul className="mt-3 space-y-2">
                     {(firm.vacancies || []).map((v, i) => (
                       <li key={i} className="rounded-md border bg-background p-3 text-sm">
-                        <div className="font-medium">{/^https?:/.test(v.url) ? <a href={v.url} target="_blank" rel="noreferrer" className="underline">{v.title}</a> : v.title}</div>
+                        <div className="font-medium">{isNew(v) && <span className="mr-2 rounded-full bg-primary px-2 py-0.5 text-[10px] font-semibold uppercase text-primary-foreground">New</span>}{/^https?:/.test(v.url) ? <a href={v.url} target="_blank" rel="noreferrer" className="underline">{v.title}</a> : v.title}</div>
                         <div className="text-xs text-muted-foreground">{[v.location, v.closing_date && `closes ${v.closing_date}`].filter(Boolean).join(' · ')}</div>
                       </li>
                     ))}

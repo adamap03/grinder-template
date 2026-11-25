@@ -59,7 +59,7 @@ const TABLES: Record<string, Spec> = {
   recruiters: { title: 'Recruiters', cols: { name: 't', id: 't', user_id: 't', agency: 't', email: 't', phone: 't', location_range: 't', opportunities: 't', notes: 't', last_contact: 'd', created_at: 't' }, key: ['id'], owner: true, defaults: { agency: '', email: '', phone: '', location_range: '', opportunities: '', notes: '' } },
   // My profile > Manifests: career plan and goals written now and then; only the latest can be edited (see execute).
   manifests: { title: 'Manifests', cols: { title: 't', id: 't', user_id: 't', now: 't', one_year: 't', five_years: 't', plan: 't', non_negotiables: 't', created_at: 't', updated_at: 't' }, key: ['id'], owner: true, defaults: { now: '', one_year: '', five_years: '', plan: '', non_negotiables: '' } },
-  profiles: { title: 'Profiles', cols: { user_id: 't', languages: 'j', assessment: 't', discover: 'j', updated_at: 't' }, key: ['user_id'], owner: true, defaults: { languages: [], assessment: '' } },
+  profiles: { title: 'Profiles', cols: { user_id: 't', languages: 'j', assessment: 't', discover: 'j', jobs_checked_at: 't?', updated_at: 't' }, key: ['user_id'], owner: true, defaults: { languages: [], assessment: '' } },
   profile_history: { title: 'Profile history', cols: { label: 't', id: 't', user_id: 't', assessment: 't', created_at: 't' }, key: ['id'], owner: true },
 };
 const SERVER_ONLY = new Set(['site_links', 'users', 'demo_usage', 'resume_files', 'firm_lookups', 'directory_firms', 'profile_history', 'search_terms']); // never readable or writable from the browser

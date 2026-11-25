@@ -116,7 +116,8 @@ export const checkShortlistFirm = createServerFn({ method: 'POST' })
       await allowDemo('research');
       const f = await import('./firms.server');
       const [v, frame] = await Promise.all([f.readVacancies(String(row['name']), url), f.embeddable(url)]);
-      const patch = { vacancies: v.vacancies, vacancy_count: v.readable ? v.vacancies.length : null, vacancy_note: v.note, embeddable: frame === null ? '' : frame ? 'yes' : 'no', checked_at: new Date().toISOString() };
+      const { mergePostings } = await import('./job-updates.server');
+      const patch = { vacancies: v.readable ? mergePostings(row['vacancies'] as never, v.vacancies, row['vacancy_count'] == null) : v.vacancies, vacancy_count: v.readable ? v.vacancies.length : null, vacancy_note: v.note, embeddable: frame === null ? '' : frame ? 'yes' : 'no', checked_at: new Date().toISOString() };
       await db.from('shortlist').update(patch).eq('id', data.id);
       return { ok: true as const, ...patch };
     } catch (e) {
@@ -173,4 +174,25 @@ export const addShortlistToDirectory = createServerFn({ method: 'POST' })
     if (!row) return { added: false };
     const d = await import('./directory.server');
     return { added: await d.addFromShortlist({ name: String(row['name']), website: (row['website'] as string | null) ?? null, careers_url: (row['careers_url'] as string | null) ?? null, town: String(row['town'] ?? ''), tags: String(row['tags'] ?? '') }) };
+  });
+
+// Shortlist "Updates" card: postings new in the last week, when the job boards were last read, and a running check.
+export const jobUpdates = createServerFn({ method: 'POST' })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => (await import('./job-updates.server')).newPostings(context.userId));
+
+// "Check now": read every shortlisted firm's job board in the background (counts once against the daily allowance).
+export const checkJobBoardsNow = createServerFn({ method: 'POST' })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    try {
+      const u = await import('./job-updates.server');
+      if (u.runStatus(context.userId).running) return { ok: true as const };
+      const { allowDemo } = await import('./demo.server');
+      await allowDemo('research');
+      void u.checkJobBoards(context.userId).catch((e: Error) => console.error('job boards:', e.message));
+      return { ok: true as const };
+    } catch (e) {
+      return { ok: false as const, error: (e as Error).message };
+    }
   });

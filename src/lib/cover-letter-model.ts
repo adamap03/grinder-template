@@ -5,14 +5,19 @@ import { z } from 'zod';
 /** Starting points offered in the creator. Add a type here and it appears in the picker and guides Claude's draft. */
 export const LETTER_TYPES = [
   {
-    id: 'graduate', name: 'Graduate scheme',
-    blurb: 'Applying to a structured graduate programme.',
+    id: 'graduate', name: 'Engineering graduate scheme',
+    blurb: "Applying to an engineering firm's graduate programme.",
     guide: 'A UK graduate scheme application. Open with the scheme by name and why this firm. Show degree, relevant modules or dissertation, placements and projects as evidence of the competencies graduate recruiters screen for (technical ability, teamwork, communication, motivation for the sector, progress towards chartership). One page.',
   },
   {
     id: 'internship', name: 'Internship / placement',
     blurb: 'A summer internship, industrial placement or year in industry.',
     guide: 'A UK internship or industrial placement application. Open with the placement, its dates if known and the course the candidate is on. Emphasise eagerness to learn, transferable skills from study, projects, part-time work and societies, and what they hope to contribute and gain. One page.',
+  },
+  {
+    id: 'general', name: 'Non-engineering job',
+    blurb: 'Any other role: retail, hospitality, admin, part-time or temporary work.',
+    guide: 'A UK cover letter for a job outside engineering. Lead with why this employer and this role, then the transferable strengths the advert asks for (reliability, customer service, teamwork, organisation, communication), backed by real examples from any work, study or volunteering. Mention the engineering degree only briefly, as evidence of a useful skill. Do not use engineering jargon. Half a page to one page.',
   },
 ] as const;
 export type LetterType = (typeof LETTER_TYPES)[number]['id'];

@@ -3,7 +3,9 @@ import "./lib/error-capture";
 import { consumeLastCapturedError } from "./lib/error-capture";
 import { renderErrorPage } from "./lib/error-page";
 import { clientKey, hit } from "./lib/rate-limit";
-import { setupResponse } from "./lib/setup.server"; // loads saved settings into process.env first
+import { configured, setupResponse } from "./lib/setup.server"; // loads saved settings into process.env first
+import { startWeeklyChecks } from "./lib/job-updates.server";
+
 
 // Optional visitor-tracker script added to every page (e.g. a dashboard's t.js), only when VISITOR_TRACKER_URL is set.
 async function withTracker(response: Response): Promise<Response> {
@@ -82,6 +84,7 @@ export default {
       return withHeaders(new Response("Too many requests. Please wait a minute.", { status: 429, headers: { "retry-after": "60", "content-type": "text/plain" } }));
     }
     try {
+      if (configured()) startWeeklyChecks(); // weekly job board reads (Shortlist "Updates"); starts once
       const setup = await setupResponse(request);
       if (setup) return withHeaders(setup);
       const handler = await getServerEntry();

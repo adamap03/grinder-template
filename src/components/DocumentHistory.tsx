@@ -16,8 +16,9 @@ const toBase64 = (buf: ArrayBuffer) => {
 };
 
 /** Uploaded old CVs or cover letters, newest first, so changes over time are easy to follow. */
-/** onUse: adds a "Use" button to uploaded files (the cover letter creator opens an editable copy). */
-export function DocumentHistory({ kind, title, intro, className = 'mt-8', onUse }: { kind: 'CV' | 'Cover letter'; title: string; intro: string; className?: string; onUse?: (d: Doc) => void }) {
+/** onUse: adds a "Use" button to uploaded files (the cover letter creator opens an editable copy).
+ *  onOpen: Open shows an uploaded file there (the creator's left panel) instead of in a new tab. */
+export function DocumentHistory({ kind, title, intro, className = 'mt-8', onUse, onOpen }: { kind: 'CV' | 'Cover letter'; title: string; intro: string; className?: string; onUse?: (d: Doc) => void; onOpen?: (d: Doc) => void }) {
   const list = useServerFn(listDocuments);
   const upload = useServerFn(uploadDocumentFn);
   const remove = useServerFn(removeDocument);
@@ -57,6 +58,7 @@ export function DocumentHistory({ kind, title, intro, className = 'mt-8', onUse 
   async function view(d: Doc) {
     // Letters made in the app have no file: open them in the cover letter creator.
     if (d.created) { void navigate({ to: '/preparation', search: { tab: 'create', letter: d.id } }); return; }
+    if (onOpen) { onOpen(d); return; }
     const w = window.open('about:blank', '_blank');
     const r = await open({ data: { kind, id: d.id } }).catch(() => ({ url: null }));
     if (r.url && w) w.location.href = r.url;

@@ -23,6 +23,21 @@ export const uploadDocumentFn = createServerFn({ method: 'POST' })
     return r.error ? { ok: false as const, error: r.error.message } : { ok: true as const, id: String((r.data as { id?: unknown } | null)?.id ?? '') };
   });
 
+/** An uploaded CV or cover letter for showing in place (DocumentViewer): a fresh file link, plus its text when it
+ *  is not a PDF. */
+export const viewDocument = createServerFn({ method: 'POST' })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d) => z.object({ kind: Kind, id: z.string().max(60) }).parse(d))
+  .handler(async ({ data, context }) => {
+    const { docSource, isPdfName } = await import('./documents.server');
+    const head = await docSource(context.userId, data.kind, data.id, false);
+    if (!head) return { url: null, text: '', pdf: true };
+    const pdf = isPdfName(head.name);
+    if (pdf) return { url: head.url, text: '', pdf };
+    const full = await docSource(context.userId, data.kind, data.id);
+    return { url: full?.url ?? head.url, text: full?.text ?? '', pdf };
+  });
+
 /** A fresh link to open an uploaded file (links stored in Notion expire after an hour). */
 export const openDocument = createServerFn({ method: 'POST' })
   .middleware([requireSupabaseAuth])

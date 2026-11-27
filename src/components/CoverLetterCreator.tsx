@@ -6,8 +6,9 @@ import { DocumentHistory } from '@/components/DocumentHistory';
 import { uploadDocumentFn } from '@/lib/documents.functions';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/Button';
-import { pdfEmbedUrl } from '@/lib/utils';
-import { draftCoverLetter, pastLetterFile, pastLetterParts } from '@/lib/cover-letter.functions';
+import { draftCoverLetter, pastLetterParts } from '@/lib/cover-letter.functions';
+import { viewDocument } from '@/lib/documents.functions';
+import { DocumentViewer, type Viewed } from '@/components/DocumentViewer';
 import { ACCENT_RGB, LETTER_TYPES, blankLetter, letterDOCX, letterPDF, letterText, readLetter, todayLong, type Letter, type LetterType } from '@/lib/cover-letter-model';
 
 // Preparation > Create new cover letter: pick a letter type, give the firm, role and advert, and Claude drafts a letter
@@ -43,18 +44,17 @@ export function CoverLetterCreator({ letterId }: { letterId?: string | undefined
   const [mine, setMine] = useState<Made[] | null>(null);
   const [dragging, setDragging] = useState(false);
   const [historyKey, setHistoryKey] = useState(0);
-  const fileOf = useServerFn(pastLetterFile);
+  const viewDoc = useServerFn(viewDocument);
   // An uploaded past letter shown in the left panel (Open): PDFs in a viewer, other files as their text.
-  const [viewing, setViewing] = useState<{ id: string; name: string; url: string | null; text: string; pdf: boolean } | null>(null);
+  const [viewing, setViewing] = useState<Viewed | null>(null);
   const [shownId, setShownId] = useState(''); // which letter made here is shown on the left ('' = the latest)
   // A dot in Past cover letters: an uploaded file shows as the file, a letter made here as its preview.
   const select = (d: { id: string; name: string; created: boolean }) => { if (d.created) { setViewing(null); setShownId(d.id); } else void showPast(d); };
   async function showPast(d: { id: string; name: string }) {
-    const pdf = /.pdf$/i.test(d.name) || !/.(docx?|odt|txt)$/i.test(d.name);
-    setViewing({ id: d.id, name: d.name, url: null, text: '', pdf });
-    const r = await fileOf({ data: { id: d.id, pdf } }).catch(() => null);
+    setViewing({ id: d.id, name: d.name, url: null, text: '', pdf: true });
+    const r = await viewDoc({ data: { kind: 'Cover letter', id: d.id } }).catch(() => null);
     if (!r?.url) { setViewing(null); setError('That file could not be opened. Please retry in a moment.'); return; }
-    setViewing({ id: d.id, name: d.name, url: r.url, text: r.text, pdf });
+    setViewing({ id: d.id, name: d.name, url: r.url, text: r.text, pdf: r.pdf });
   }
 
   // Letters made in the app (they have data), most recently edited first.
@@ -198,10 +198,7 @@ export function CoverLetterCreator({ letterId }: { letterId?: string | undefined
                   </div>
                 </div>
                 <div className="h-[78vh] overflow-hidden rounded-lg border bg-glass-strong">
-                  {!viewing.url ? <div className="grid h-full place-items-center"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
-                    : viewing.pdf ? <iframe title={viewing.name} src={pdfEmbedUrl(viewing.url)} className="h-full w-full border-0 bg-white" />
-                    : viewing.text ? <div className="h-full overflow-auto bg-muted/40 p-5"><div className="mx-auto max-w-[650px] whitespace-pre-wrap bg-white p-10 text-sm text-[#2a2a2a] shadow">{viewing.text}</div></div>
-                    : <p className="p-5 text-sm">This file's text could not be read here. <a href={viewing.url} target="_blank" rel="noreferrer" className="underline">Download it</a> to read it.</p>}
+                  <DocumentViewer doc={viewing} />
                 </div>
               </div>
             ) : mine === null ? <p className="py-8 text-sm text-muted-foreground">Loading cover letters…</p> : !latest ? <p className="py-8 text-sm text-muted-foreground">No cover letters made here yet. Upload one, pick one from Past cover letters, or create one.</p> : (

@@ -31,7 +31,7 @@ const TABLES: Record<string, Spec> = {
   feature_allowance_usage: { title: 'Feature allowances', cols: { resource: 't', user_id: 't', kind: 't', period: 't', created_at: 't', own_key: 'b', processing_claimed: 'b' }, key: ['user_id', 'kind', 'period', 'resource'], owner: true, defaults: { own_key: false, processing_claimed: false } },
   resume_files: { title: 'Resume files', cols: { path: 't', user_id: 't', file: 'f' }, key: ['path'] },
   // Old CVs (Resume page, "Resume history") and old cover letters (Preparation, "Past cover letters"), uploaded by hand.
-  resume_history: { title: 'Resume history', cols: { name: 't', id: 't', user_id: 't', date: 'd', file: 'f', notes: 't', created_at: 't' }, key: ['id'], owner: true, defaults: { notes: '' } },
+  resume_history: { title: 'Resume history', cols: { name: 't', id: 't', user_id: 't', date: 'd', file: 'f', notes: 't', text: 't', created_at: 't' }, key: ['id'], owner: true, defaults: { notes: '', text: '' } },
   // Cover letters made in the app (Preparation > Create new cover letter) have data (the letter) and no file; text = the
   // letter as plain text, also read once from uploaded files so new drafts can draw on similar past letters.
   cover_letters: { title: 'Past cover letters', cols: { name: 't', id: 't', user_id: 't', date: 'd', file: 'f', notes: 't', text: 't', data: 'j', parsed: 'j', created_at: 't', updated_at: 't' }, key: ['id'], owner: true, defaults: { notes: '', text: '' } },

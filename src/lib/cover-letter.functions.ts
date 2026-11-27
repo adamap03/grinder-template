@@ -58,18 +58,6 @@ export const draftCoverLetter = createServerFn({ method: 'POST' })
     }
   });
 
-/** An uploaded past letter for viewing in the creator: a fresh file link, plus its text when it is not a PDF. */
-export const pastLetterFile = createServerFn({ method: 'POST' })
-  .middleware([requireSupabaseAuth])
-  .inputValidator((d) => z.object({ id: z.string().max(60), pdf: z.boolean() }).parse(d))
-  .handler(async ({ data, context }) => {
-    const { freshFileUrl } = await import('./notion-db.server');
-    const url = await freshFileUrl('cover_letters', context.userId, data.id);
-    if (data.pdf) return { url, text: '' };
-    const { letterSource } = await import('./documents.server');
-    return { url, text: (await letterSource(context.userId, data.id))?.text ?? '' };
-  });
-
 const Parts = z.object({
   company: z.string().describe('The firm the letter is addressed to, or "".'),
   role: z.string().describe('The role or scheme applied for, or "".'),

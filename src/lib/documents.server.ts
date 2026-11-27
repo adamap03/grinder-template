@@ -74,19 +74,26 @@ export async function pastLetters(uid: string, limit = 12, extract = 6): Promise
   return rows.map(({ file: _f, ...r }) => r);
 }
 
-/** One past cover letter with its text (read from the uploaded file once, then saved on the row). */
-export async function letterSource(uid: string, id: string) {
+/** One uploaded CV or cover letter: its name, a fresh file link, and its text (read from the file once, then saved on
+ *  the row). Notion is always asked for the file, since a just-uploaded row is cached without its file link. */
+export async function docSource(uid: string, kind: Kind, id: string, withText = true) {
   const { userClient } = await import('@/integrations/supabase/client.server');
   const { freshFileUrl } = await import('./notion-db.server');
   const db = userClient(uid);
-  const { data: row } = await db.from('cover_letters').select('*').eq('id', id).maybeSingle();
+  const { data: row } = await db.from(tableOf(kind)).select('*').eq('id', id).maybeSingle();
   if (!row) return null;
+  const made = !!(row['data'] as { paragraphs?: unknown } | null)?.paragraphs; // a cover letter made in the app: no file
+  const url = made ? null : await freshFileUrl(tableOf(kind), uid, id);
   let text = String(row['text'] ?? '');
-  // Ask Notion for the file even when the cached row shows none: a just-uploaded row is cached without its file link.
-  if (!text && !(row['data'] as { paragraphs?: unknown } | null)?.paragraphs) {
-    const url = await freshFileUrl('cover_letters', uid, id);
-    text = url ? (await fileText(url)).slice(0, 20000) : '';
-    if (text) await db.from('cover_letters').update({ text }).eq('id', id);
+  if (withText && !text && url) {
+    text = (await fileText(url)).slice(0, 20000);
+    if (text) await db.from(tableOf(kind)).update({ text }).eq('id', id);
   }
-  return { name: String(row['name']), text, data: row['data'] as unknown, parsed: row['parsed'] as unknown };
+  return { name: String(row['name']), url, text, data: row['data'] as unknown, parsed: row['parsed'] as unknown };
 }
+
+/** Whether an uploaded file is shown as a PDF (by its name; renamed files without an extension are treated as PDF). */
+export const isPdfName = (name: string) => !/\.(docx?|odt|txt)$/i.test(name);
+
+/** One past cover letter with its text. */
+export const letterSource = (uid: string, id: string) => docSource(uid, 'Cover letter', id);

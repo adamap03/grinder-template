@@ -10,7 +10,6 @@ import { useKeys } from '@/lib/keys';
 import { createQuiz, submitQuiz } from '@/lib/quiz.functions';
 import { pageHead } from '@/lib/seo';
 import { NotesDatabase } from '@/components/NotesDatabase';
-import { DocumentHistory } from '@/components/DocumentHistory';
 import { CoverLetterCreator } from '@/components/CoverLetterCreator';
 
 export const Route = createFileRoute('/preparation')({
@@ -24,7 +23,7 @@ export const Route = createFileRoute('/preparation')({
   component: PreparationPage,
 });
 
-const TABS = [['quiz', 'Fit quiz'], ['answers', 'Repeatable answers'], ['questions', 'Common interview questions'], ['letters', 'Past cover letters'], ['create', 'Create new cover letter']] as const;
+const TABS = [['quiz', 'Fit quiz'], ['answers', 'Repeatable answers'], ['questions', 'Common interview questions'], ['create', 'Cover letters']] as const;
 
 function PreparationPage() {
   const { tab = 'quiz', letter } = Route.useSearch();
@@ -34,13 +33,13 @@ function PreparationPage() {
         <h1 className="font-display text-5xl">Preparation</h1>
         <nav aria-label="Preparation sections" className="mt-4 flex flex-wrap gap-2">
           {TABS.map(([k, label]) => (
-            <Link key={k} to="/preparation" search={{ tab: k }} className={`rounded-full px-4 py-1.5 text-sm ${tab === k ? 'bg-primary text-primary-foreground' : 'glass hover:bg-glass-strong'}`}>{label}</Link>
+            <Link key={k} to="/preparation" search={{ tab: k }} className={`rounded-full px-4 py-1.5 text-sm ${tab === k || (k === 'create' && tab === 'letters') ? 'bg-primary text-primary-foreground' : 'glass hover:bg-glass-strong'}`}>{label}</Link>
           ))}
         </nav>
       </div>
-      {tab === 'create' ? <CoverLetterCreator letterId={letter} /> : tab === 'quiz' ? <QuizPage /> : tab === 'answers'
+      {/* 'letters' (the old Past cover letters tab, now part of Cover letters) still opens Cover letters for old links. */}
+      {tab === 'create' || tab === 'letters' ? <CoverLetterCreator letterId={letter} /> : tab === 'quiz' ? <QuizPage /> : tab === 'answers'
         ? <NotesDatabase table="answers" titleCol="title" titleLabel="Prompt or topic" intro="Answers you have already written for applications. Copy, adapt and reuse them." />
-        : tab === 'letters' ? <DocumentHistory kind="Cover letter" title="Past cover letters" intro="Cover letters you upload here (up to 5 MB each) and the ones you create in the app, newest first. New drafts draw on these." />
         : <NotesDatabase table="interview_questions" titleCol="question" titleLabel="Question" intro="Common interview questions with your prepared answers." />}
     </Shell>
   );

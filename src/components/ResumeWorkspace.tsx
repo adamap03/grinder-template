@@ -18,6 +18,8 @@ import { CompanySharing } from './CompanySharing';
 import { EmployerReview } from './EmployerReview';
 import { AtsCheck } from './AtsCheck';
 import { LanguagesEditor } from './LanguagesEditor';
+import { DocumentViewer, type Viewed } from './DocumentViewer';
+import { viewDocument } from '@/lib/documents.functions';
 import type { Session as AuthSession } from "@/integrations/supabase/client";
 
 type Row = { id: string; title: string; data: Json; original_path: string | null; extracted_text: string; updated_at: string };
@@ -25,8 +27,19 @@ type Version = { id: string; data: Json; label: string; created_at: string };
 const primary='inline-flex items-center justify-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50';
 const secondary='inline-flex items-center justify-center gap-2 rounded-md border bg-glass-strong px-3 py-2 text-sm disabled:opacity-50';
 
-/** aside: shown beside the current resume in the list view (the Resume page puts Resume history there), below the editor otherwise. */
-export function ResumeWorkspace({ jobURL='', target='', aside }: { jobURL?: string; target?: string; aside?: React.ReactNode }) {
+/** aside: shown beside the current resume in the list view (the Resume page puts Resume history there), below the editor
+ *  otherwise. In the list view it gets onSelect/selectedId, so picking an uploaded CV there shows it on the left. */
+export type AsidePick = { onSelect?: (d: { id: string; name: string }) => void; selectedId?: string | undefined };
+export function ResumeWorkspace({ jobURL='', target='', aside }: { jobURL?: string; target?: string; aside?: (pick: AsidePick) => React.ReactNode }) {
+  const view = useServerFn(viewDocument);
+  // An uploaded CV from Resume history shown on the left instead of the current resume (null = the current resume).
+  const [viewing,setViewing]=useState<Viewed|null>(null);
+  async function showUpload(d:{id:string;name:string}){
+    setViewing({id:d.id,name:d.name,url:null,text:'',pdf:true});
+    const r=await view({data:{kind:'CV',id:d.id}}).catch(()=>null);
+    if(!r?.url){setViewing(null);setError('That file could not be opened. Please retry in a moment.');return;}
+    setViewing({id:d.id,name:d.name,url:r.url,text:r.text,pdf:r.pdf});
+  }
   const [session,setSession]=useState<AuthSession|null>(null);
   const [authReady,setAuthReady]=useState(false);
   const [rows,setRows]=useState<Row[]>([]);
@@ -132,8 +145,11 @@ export function ResumeWorkspace({ jobURL='', target='', aside }: { jobURL?: stri
       </div>
       <div className="grid items-start gap-6 lg:grid-cols-2"><div className="min-w-0">
       <div className="flex items-center justify-between border-b py-5"><h2 className="text-lg font-semibold">Your current resume</h2><Button className="flex items-center gap-2 text-sm" disabled={!!busy} onClick={()=>{setBusy('Creating resume');create(blankResume()).catch(e=>setError(e.message)).finally(()=>setBusy(''));}}>+ Create from scratch</Button></div>
-      {loadingRows?<p className="py-8 text-sm text-muted-foreground">Loading resumes…</p>:rows.length===0?<p className="py-8 text-sm text-muted-foreground">No resumes yet.</p>:<CurrentResume rows={rows} open={open} select={setSelected}/>}
-      </div>{aside&&<div className="min-w-0 lg:pt-5">{aside}</div>}</div>
+      {viewing?<div className="space-y-3 py-5">
+        <div className="flex flex-wrap items-center justify-between gap-3"><div className="min-w-0"><p className="truncate font-medium">{viewing.name}</p><p className="text-xs text-muted-foreground">Past CV (uploaded file)</p></div><Button onClick={()=>setViewing(null)} className={secondary}><ArrowLeft className="h-4 w-4"/>Current resume</Button></div>
+        <div className="h-[78vh] overflow-hidden rounded-lg border bg-glass-strong"><DocumentViewer doc={viewing}/></div>
+      </div>:loadingRows?<p className="py-8 text-sm text-muted-foreground">Loading resumes…</p>:rows.length===0?<p className="py-8 text-sm text-muted-foreground">No resumes yet.</p>:<CurrentResume rows={rows} open={open} select={setSelected}/>}
+      </div>{aside&&<div className="min-w-0 lg:pt-5">{aside({onSelect:d=>void showUpload(d),selectedId:viewing?.id})}</div>}</div>
     </>:<>
       <div className="flex flex-wrap items-center justify-between gap-3 pb-4 pt-3"><div className="flex min-w-0 items-center gap-3"><Icon label="Back to resumes" disabled={saveStatus==='Saving…'||saveStatus==='Unsaved changes'} onClick={()=>{setResume(null);setActive(null);}}><ArrowLeft/></Icon><div><input aria-label="Resume title" value={title} onChange={e=>setTitle(e.target.value)} className="max-w-52 bg-transparent font-semibold outline-none"/><p role="status" className="mt-1 flex items-center gap-1 text-xs text-muted-foreground"><Check className="h-3 w-3"/>{saveStatus}</p></div></div><div className="flex flex-wrap items-center gap-2"><Icon label="Undo" disabled={!past.length} onClick={()=>{const previous=past[past.length-1];if(!previous)return;setFuture(f=>[resume,...f]);setPast(p=>p.slice(0,-1));setResume(previous);}}><Undo2/></Icon><Icon label="Redo" disabled={!future.length} onClick={()=>{const next=future[0];if(!next)return;setPast(p=>[...p,resume]);setFuture(f=>f.slice(1));setResume(next);}}><Redo2/></Icon><Icon label="Version history" onClick={history}><History/></Icon><Button className={secondary} onClick={snapshot} disabled={!!busy}>Save version</Button><Button className={secondary} onClick={()=>{setAssistantTarget(null);setModal('ai');}}><Sparkles className="h-4 w-4 text-amber-500"/>AI assistance</Button><Button className={secondary} onClick={()=>setModal('ats')}><Gauge className="h-4 w-4"/>ATS check</Button><Button className={primary} disabled={!!busy} onClick={()=>download('pdf')}><Download className="h-4 w-4"/>PDF</Button><Button className={secondary} disabled={!!busy} onClick={()=>download('docx')}>DOCX</Button></div></div>
       <div className="mb-4 flex flex-wrap items-center gap-x-5 gap-y-3 border-y py-3 text-xs">
@@ -170,7 +186,7 @@ export function ResumeWorkspace({ jobURL='', target='', aside }: { jobURL?: stri
         </div>
       </div>
     </>}
-    {resume&&aside}
+    {resume&&aside?.({})}
     {modal&&modal!=='ats'&&resume&&<div className="fixed inset-0 z-50 grid place-items-center bg-foreground/20 p-4" onClick={()=>setModal(null)}><div role="dialog" aria-modal="true" aria-label={modal==='ai'?'Resume assistance':modal==='history'?'Version history':'Original resume'} className="max-h-[90dvh] w-full max-w-xl overflow-y-auto rounded-lg glass-strong p-6" onClick={e=>e.stopPropagation()}><div className="mb-5 flex items-center justify-between"><h2 className="font-display text-3xl">{modal==='ai'?'A thoughtful second look':modal==='history'?'Version history':'Original resume'}</h2><Icon label="Close dialog" onClick={()=>setModal(null)}><X/></Icon></div>
       {modal==='ai'&&<ResumeAssistant resume={resume} change={change} initialTarget={target} initialJob={jobURL} selected={selected} targetItem={assistantTarget} onClose={()=>setModal(null)}/>}
       {modal==='history'&&<div className="space-y-3">{versions.length===0?<p className="text-sm text-muted-foreground">No saved versions yet.</p>:versions.map(v=><div key={v.id} className="flex items-center justify-between gap-4 border-b py-3"><div><p className="text-sm">{v.label}</p><p className="text-xs text-muted-foreground">{new Date(v.created_at).toLocaleString()}</p></div><Button className={secondary} onClick={()=>{const r=validateSaved(v.data);if(r){change(r);setModal(null);}}}>Restore</Button></div>)}</div>}

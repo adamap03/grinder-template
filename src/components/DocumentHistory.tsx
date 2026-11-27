@@ -19,7 +19,7 @@ const toBase64 = (buf: ArrayBuffer) => {
 /** onUse: adds a "Use" button to uploaded files (the cover letter creator opens an editable copy).
  *  onOpen: Open shows an uploaded file there (the creator's left panel) instead of in a new tab.
  *  onSelect: the timeline dots become buttons that pick which document is shown there; selectedId is filled in. */
-export function DocumentHistory({ kind, title, intro, className = 'mt-8', onUse, onOpen, onSelect, selectedId }: { kind: 'CV' | 'Cover letter'; title: string; intro: string; className?: string; onUse?: (d: Doc) => void; onOpen?: (d: Doc) => void; onSelect?: (d: Doc) => void; selectedId?: string | undefined }) {
+export function DocumentHistory({ kind, title, intro, className = 'mt-8', onUse, onOpen, onSelect, selectedId }: { kind: 'CV' | 'Cover letter'; title: string; intro: string; className?: string; onUse?: ((d: Doc) => void) | undefined; onOpen?: ((d: Doc) => void) | undefined; onSelect?: ((d: Doc) => void) | undefined; selectedId?: string | undefined }) {
   const list = useServerFn(listDocuments);
   const upload = useServerFn(uploadDocumentFn);
   const remove = useServerFn(removeDocument);
